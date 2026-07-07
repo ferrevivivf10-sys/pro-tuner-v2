@@ -8,7 +8,7 @@
  * - NOVO v9: hold da nota (600ms), media movel de cents, debounce de troca de nota (180ms)
  */
 
-import React, { useEffect, useRef, memo, useMemo } from "react";
+import React, { useEffect, useRef, memo, useMemo, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -49,6 +49,7 @@ const STRING_CX = STRING_AREA_WIDTH / 2;
 const NOTE_HOLD_MS = 600;        // tempo que a nota permanece apos o som sumir
 const NOTE_SWITCH_MS = 180;      // nova nota precisa persistir esse tempo p/ trocar
 const CENTS_SMOOTH_SIZE = 5;     // media movel das ultimas N leituras de cents
+const LOCK_HIT_HEIGHT = 40;      // altura da area de toque de cada corda (modo manual)
 
 // Cores cromaticas fixas por POSICAO da corda (0 = mais grave ... 5 = mais aguda)
 const STRING_COLORS = [
@@ -100,6 +101,68 @@ interface PitchLabDisplayProps {
   confidence: number;
   selectedTuning: string;
   onTuningPress?: () => void;
+}
+
+// Extrai nota + oitava de um rotulo de corda, ex: "Eb2" -> { note: "Eb", octave: 2 }
+function parseStringLabel(label: string): { note: string; octave: number } {
+  const match = label.match(/^([A-G][b#]?)(\d)$/);
+  if (!match) return { note: label, octave: 0 };
+  return { note: match[1], octave: parseInt(match[2], 10) };
+}
+
+// ===== Modo por corda (manual) =====
+// Quando o usuario trava numa corda especifica, os cents passam a ser
+// calculados sempre contra a frequencia daquela corda (nao contra a nota
+// cromatica mais proxima), para nao "confundir" nota quando o instrumento
+// esta muito desafinado.
+function useLockedCents(frequency: number, targetFreq: number | null) {
+  const [display, setDisplay] = React.useState({ cents: 0, hasSignal: false });
+  const centsBufferRef = useRef<number[]>([]);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    centsBufferRef.current = [];
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    setDisplay({ cents: 0, hasSignal: false });
+  }, [targetFreq]);
+
+  useEffect(() => {
+    if (!targetFreq) return;
+
+    const hasRawSignal = frequency > 50;
+
+    if (hasRawSignal) {
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
+      }
+
+      const rawCents = 1200 * Math.log2(frequency / targetFreq);
+      const buf = centsBufferRef.current;
+      buf.push(rawCents);
+      if (buf.length > CENTS_SMOOTH_SIZE) buf.shift();
+      const avgCents = buf.reduce((a, b) => a + b, 0) / buf.length;
+
+      setDisplay({ cents: avgCents, hasSignal: true });
+    } else if (!holdTimerRef.current) {
+      holdTimerRef.current = setTimeout(() => {
+        centsBufferRef.current = [];
+        holdTimerRef.current = null;
+        setDisplay({ cents: 0, hasSignal: false });
+      }, NOTE_HOLD_MS);
+    }
+  }, [frequency, targetFreq]);
+
+  useEffect(() => {
+    return () => {
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    };
+  }, []);
+
+  return display;
 }
 
 // ===== Hook de suavizacao (v9) =====
@@ -290,11 +353,13 @@ const StringLinesFullWidth = memo(
     tuningNames,
     activeStringIndex,
     hasSignal,
+    lockedStringIndex,
   }: {
     centsValue: number;
     tuningNames: string[];
     activeStringIndex: number | null;
     hasSignal: boolean;
+    lockedStringIndex: number | null;
   }) => {
     const x1 = 0;
     const x2 = STRING_AREA_WIDTH;
@@ -313,7 +378,9 @@ const StringLinesFullWidth = memo(
           const stringName = tuningNames[i] || "";
           const stringColor = STRING_COLORS[i] || "#666666";
           const isActive = activeStringIndex === i && hasSignal;
-          const displayColor = isActive ? stringColor : "#3C3C3C";
+          // "Alvo": corda travada manualmente, exibida com destaque mesmo sem sinal
+          const isTargeted = lockedStringIndex === i;
+          const displayColor = isActive || isTargeted ? stringColor : "#3C3C3C";
 
           // Curvatura so na corda ativa, proporcional aos cents
           const amplitude = isActive ? Math.min(Math.abs(centsValue), 22) : 0;
@@ -323,8 +390,8 @@ const StringLinesFullWidth = memo(
             x1 + width * 0.75
           } ${y + curve} ${x2} ${y}`;
 
-          const strokeWidth = isActive ? 3 : 1.5;
-          const opacity = isActive ? 1 : 0.45;
+          const strokeWidth = isActive ? 3 : isTargeted ? 2 : 1.5;
+          const opacity = isActive ? 1 : isTargeted ? 0.7 : 0.45;
 
           return (
             <React.Fragment key={i}>
@@ -349,13 +416,14 @@ const StringLinesFullWidth = memo(
               <SvgText
                 x={10}
                 y={y - 6}
-                fontSize={isActive ? "13" : "11"}
-                fill={isActive ? displayColor : "#666666"}
+                fontSize={isActive ? "13" : isTargeted ? "12" : "11"}
+                fill={isActive ? displayColor : isTargeted ? stringColor : "#666666"}
                 textAnchor="start"
-                fontWeight={isActive ? "700" : "600"}
-                opacity={isActive ? 1 : 0.7}
+                fontWeight={isActive || isTargeted ? "700" : "600"}
+                opacity={isActive ? 1 : isTargeted ? 0.9 : 0.7}
               >
                 {stringName}
+                {isTargeted && !isActive ? " •" : ""}
               </SvgText>
             </React.Fragment>
           );
@@ -364,6 +432,33 @@ const StringLinesFullWidth = memo(
     );
   }
 );
+StringLinesFullWidth.displayName = "StringLinesFullWidth";
+
+// Areas de toque invisiveis sobre cada corda, para ativar o modo manual.
+// Fica numa camada separada da SVG (que e pointerEvents="none").
+function StringHitTargets({
+  tuningNames,
+  onStringPress,
+}: {
+  tuningNames: string[];
+  onStringPress: (index: number) => void;
+}) {
+  return (
+    <View style={styles.hitLayer} pointerEvents="box-none">
+      {tuningNames.map((_, i) => {
+        const y = BASE_Y + i * CHORD_SPACING;
+        return (
+          <TouchableOpacity
+            key={i}
+            style={[styles.hitRow, { top: y - LOCK_HIT_HEIGHT / 2 }]}
+            activeOpacity={0.5}
+            onPress={() => onStringPress(i)}
+          />
+        );
+      })}
+    </View>
+  );
+}
 
 function PitchLabDisplayComponent({
   note,
@@ -378,23 +473,49 @@ function PitchLabDisplayComponent({
   // ===== v9: tudo que aparece na tela vem da versao suavizada =====
   const smooth = useSmoothedPitch(note, octave, frequency, cents, inTune);
 
-  const [inTuneVisible, setInTuneVisible] = React.useState(false);
-
-  useEffect(() => {
-    setInTuneVisible(smooth.inTune && smooth.hasSignal);
-  }, [smooth.inTune, smooth.hasSignal]);
-
   const tuningNames =
     TUNING_STRING_NAMES[selectedTuning] ?? TUNING_STRING_NAMES.Standard;
 
-  const hasSignal = smooth.hasSignal;
-  const activeStringIndex = useMemo(
+  // ===== Modo por corda (manual) =====
+  // Tocar no nome de uma corda trava a leitura naquela corda especifica;
+  // tocar de novo (ou no chip "AUTO") volta para deteccao automatica.
+  const [lockedStringIndex, setLockedStringIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    setLockedStringIndex(null);
+  }, [selectedTuning]);
+
+  const handleStringPress = useCallback((index: number) => {
+    setLockedStringIndex((prev) => (prev === index ? null : index));
+  }, []);
+
+  const isLocked = lockedStringIndex !== null;
+  const lockedTargetFreq =
+    lockedStringIndex !== null
+      ? STRING_FREQUENCIES[tuningNames[lockedStringIndex]] ?? null
+      : null;
+  const locked = useLockedCents(frequency, lockedTargetFreq);
+
+  const hasSignal = isLocked ? locked.hasSignal : smooth.hasSignal;
+  const displayCents = isLocked ? locked.cents : smooth.cents;
+  const displayInTune = hasSignal && Math.abs(displayCents) < 10;
+  const displayFrequency = isLocked ? frequency : smooth.frequency;
+
+  const lockedLabel = isLocked ? parseStringLabel(tuningNames[lockedStringIndex]) : null;
+  const displayNote = isLocked ? lockedLabel!.note : smooth.note;
+  const displayOctave = isLocked ? lockedLabel!.octave : smooth.octave;
+
+  const [inTuneVisible, setInTuneVisible] = React.useState(false);
+
+  useEffect(() => {
+    setInTuneVisible(displayInTune);
+  }, [displayInTune]);
+
+  const autoActiveStringIndex = useMemo(
     () => getActiveStringIndex(smooth.frequency, tuningNames),
     [smooth.frequency, tuningNames]
   );
-
-  const activeColor =
-    activeStringIndex !== null ? STRING_COLORS[activeStringIndex] : "#FFFFFF";
+  const activeStringIndex = isLocked ? lockedStringIndex : autoActiveStringIndex;
 
   return (
     <View style={styles.wrapper}>
@@ -403,23 +524,23 @@ function PitchLabDisplayComponent({
         <Text
           style={[
             styles.noteChar,
-            { color: smooth.inTune && hasSignal ? "#00E676" : "#FFFFFF" },
+            { color: displayInTune ? "#00E676" : "#FFFFFF" },
           ]}
         >
-          {hasSignal ? smooth.note : "-"}
+          {hasSignal || isLocked ? displayNote : "-"}
         </Text>
-        {hasSignal && smooth.octave > 0 && (
+        {(hasSignal || isLocked) && displayOctave > 0 && (
           <Text
             style={[
               styles.octaveChar,
-              { color: smooth.inTune ? "#00C853" : "#00BCD4" },
+              { color: displayInTune ? "#00C853" : "#00BCD4" },
             ]}
           >
-            {smooth.octave}
+            {displayOctave}
           </Text>
         )}
         <Text style={styles.freqTop}>
-          {hasSignal ? `${smooth.frequency.toFixed(1)} Hz` : ""}
+          {hasSignal ? `${displayFrequency.toFixed(1)} Hz` : ""}
         </Text>
       </View>
 
@@ -457,12 +578,27 @@ function PitchLabDisplayComponent({
         {/* Cordas atravessam a tela toda, POR CIMA do anel */}
         <View style={styles.stringsLayer} pointerEvents="none">
           <StringLinesFullWidth
-            centsValue={hasSignal ? smooth.cents : 0}
+            centsValue={hasSignal ? displayCents : 0}
             tuningNames={tuningNames}
             activeStringIndex={activeStringIndex}
             hasSignal={hasSignal}
+            lockedStringIndex={lockedStringIndex}
           />
         </View>
+
+        {/* Toque no nome de uma corda para travar nela (modo manual) */}
+        <StringHitTargets tuningNames={tuningNames} onStringPress={handleStringPress} />
+
+        {/* Chip para voltar ao modo automatico */}
+        {isLocked && (
+          <TouchableOpacity
+            style={styles.modeBadge}
+            onPress={() => setLockedStringIndex(null)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.modeBadgeText}>{"⤴"} AUTO</Text>
+          </TouchableOpacity>
+        )}
 
         {/* IN TUNE */}
         {inTuneVisible && (
@@ -477,11 +613,11 @@ function PitchLabDisplayComponent({
             <Text
               style={[
                 styles.centsCornerText,
-                { color: smooth.inTune ? "#00E676" : "#FF5252" },
+                { color: displayInTune ? "#00E676" : "#FF5252" },
               ]}
             >
-              {smooth.cents > 0 ? "+" : ""}
-              {smooth.cents.toFixed(1)}
+              {displayCents > 0 ? "+" : ""}
+              {displayCents.toFixed(1)}
             </Text>
           </View>
         )}
@@ -553,6 +689,36 @@ const styles = StyleSheet.create({
     height: RING_SIZE,
     alignItems: "center",
     justifyContent: "center",
+  },
+  hitLayer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: STRING_AREA_WIDTH,
+    height: RING_SIZE,
+  },
+  hitRow: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: LOCK_HIT_HEIGHT,
+  },
+  modeBadge: {
+    position: "absolute",
+    top: 24,
+    left: 24,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: "#0D0D0D",
+    borderWidth: 1,
+    borderColor: "#333333",
+  },
+  modeBadgeText: {
+    color: "#00E676",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.5,
   },
   inTuneBadge: {
     position: "absolute",
