@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Platform } from "react-native";
 import { decode } from "base-64";
 import { useAudioRecorder, ExpoAudioStreamModule } from "@siteed/audio-studio";
-import { MPMProcessor } from "../audio/MPMProcessor";
+import { YINProcessor } from "../audio/YINProcessor";
 import { NOTES } from "../utils/noteUtils";
 
 export interface PitchData {
@@ -27,9 +27,7 @@ const INITIAL_PITCH_DATA: PitchData = {
 
 const SAMPLE_RATE = 44100;
 const BUFFER_SIZE = 2048;
-const HOP_SIZE = 1024; // 50% de sobreposicao: detecta 2x mais vezes que o buffer avanca
 const MAX_BUFFER = BUFFER_SIZE * 2;
-const UI_UPDATE_MIN_INTERVAL_MS = 50; // limita re-render, nunca a deteccao em si
 
 function calculateCentsToTarget(detectedFreq: number, targetFreq: number): number {
   if (detectedFreq <= 0 || targetFreq <= 0) return 0;
@@ -134,57 +132,50 @@ export function usePitchDetectorFinal(
                 ? combined.slice(combinedLen - MAX_BUFFER)
                 : combined;
 
-            // Processa todas as janelas sobrepostas que couberem no buffer
-            // acumulado. A deteccao roda sempre (nunca e pulada); so o
-            // setState (render) e limitado, pra UI nao sobrecarregar.
-            while (bufferRef.current.length >= BUFFER_SIZE) {
-              const chunk = bufferRef.current.slice(0, BUFFER_SIZE);
-              bufferRef.current = bufferRef.current.slice(HOP_SIZE);
+            if (bufferRef.current.length < BUFFER_SIZE) return;
 
-              let sumSq = 0;
-              for (let i = 0; i < chunk.length; i++) {
-                sumSq += chunk[i] * chunk[i];
-              }
-              const rms = Math.sqrt(sumSq / chunk.length);
+            const chunk = bufferRef.current.slice(0, BUFFER_SIZE);
+            bufferRef.current = bufferRef.current.slice(BUFFER_SIZE);
 
-              const now = Date.now();
-              const canRender = now - lastUpdateRef.current >= UI_UPDATE_MIN_INTERVAL_MS;
-
-              if (rms < noiseThreshold) {
-                if (canRender) {
-                  lastUpdateRef.current = now;
-                  setPitchData((p) => ({
-                    ...p,
-                    note: "-",
-                    frequency: 0,
-                    confidence: 0,
-                    detectionMethod: "RMS " + rms.toFixed(5),
-                  }));
-                }
-                continue;
-              }
-
-              const { frequency: freq, clarity } = MPMProcessor.detectPitch(chunk, SAMPLE_RATE);
-              if (freq <= 0) continue;
-
-              const info = getNoteInfo(freq, refA4);
-              if (!info) continue;
-
-              const cents = calculateCentsToTarget(freq, info.targetFreq);
-
-              if (canRender) {
-                lastUpdateRef.current = now;
-                setPitchData({
-                  note: info.noteName,
-                  octave: info.octave,
-                  frequency: freq,
-                  cents,
-                  inTune: Math.abs(cents) < 10,
-                  confidence: clarity,
-                  detectionMethod: "audio-studio + MPM",
-                });
-              }
+            let sumSq = 0;
+            for (let i = 0; i < chunk.length; i++) {
+              sumSq += chunk[i] * chunk[i];
             }
+            const rms = Math.sqrt(sumSq / chunk.length);
+
+            const now = Date.now();
+            if (now - lastUpdateRef.current < 80) return;
+
+            if (rms < noiseThreshold) {
+              lastUpdateRef.current = now;
+              setPitchData((p) => ({
+                ...p,
+                note: "-",
+                frequency: 0,
+                confidence: 0,
+                detectionMethod: "RMS " + rms.toFixed(5),
+              }));
+              return;
+            }
+
+            const freq = YINProcessor.detectPitch(chunk, SAMPLE_RATE);
+            if (freq <= 0) return;
+
+            const info = getNoteInfo(freq, refA4);
+            if (!info) return;
+
+            const cents = calculateCentsToTarget(freq, info.targetFreq);
+
+            lastUpdateRef.current = now;
+            setPitchData({
+              note: info.noteName,
+              octave: info.octave,
+              frequency: freq,
+              cents,
+              inTune: Math.abs(cents) < 10,
+              confidence: Math.min(rms * 40, 1),
+              detectionMethod: "audio-studio + YIN",
+            });
           },
         });
       } catch (error) {
@@ -240,7 +231,7 @@ export function usePitchDetectorFinal(
           const rms = Math.sqrt(sumSq / buffer.length);
 
           if (rms >= noiseThreshold) {
-            const { frequency: freq, clarity } = MPMProcessor.detectPitch(buffer, SAMPLE_RATE);
+            const freq = YINProcessor.detectPitch(buffer, SAMPLE_RATE);
             if (freq > 0) {
               const info = getNoteInfo(freq, refA4);
               if (info) {
@@ -251,8 +242,8 @@ export function usePitchDetectorFinal(
                   frequency: freq,
                   cents,
                   inTune: Math.abs(cents) < 10,
-                  confidence: clarity,
-                  detectionMethod: "Web Audio API + MPM",
+                  confidence: Math.min(rms * 40, 1),
+                  detectionMethod: "Web Audio API + YIN",
                 });
               }
             }
