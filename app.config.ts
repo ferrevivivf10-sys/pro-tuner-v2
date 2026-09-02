@@ -33,7 +33,7 @@ const config: ExpoConfig = {
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
     package: env.androidPackage,
-    permissions: ["POST_NOTIFICATIONS", "RECORD_AUDIO"],
+    permissions: ["RECORD_AUDIO"],
     intentFilters: [
       {
         action: "VIEW",
@@ -61,13 +61,6 @@ const config: ExpoConfig = {
       "expo-audio",
       {
         microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone.",
-      },
-    ],
-    [
-      "expo-video",
-      {
-        supportsBackgroundPlayback: true,
-        supportsPictureInPicture: true,
       },
     ],
     [
