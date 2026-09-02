@@ -51,6 +51,10 @@ const CENTS_SMOOTH_SIZE = 5;     // media movel das ultimas N leituras de cents
 const LOCK_HIT_HEIGHT = 40;      // altura da area de toque de cada corda (modo manual)
 const STRING_GUARD_CENTS = 250;  // ~metade da distancia entre cordas; acima disso o sinal esta longe de qualquer corda
 const IN_TUNE_CENTS = 5;         // |cents| < isso => afinado
+// Clareza minima (0-1) do MPM para considerar que ha uma NOTA real, e nao ruido
+// ambiente. Ajustavel: menor = mais sensivel (pega notas fracas, mas trava mais
+// em ruido); maior = so notas bem definidas.
+const CONFIDENCE_MIN = 0.6;
 
 // Cores cromaticas fixas por POSICAO da corda (0 = mais grave ... 5 = mais aguda)
 const STRING_COLORS = [
@@ -112,6 +116,7 @@ function stringFreq(name: string, refA4: number): number {
 
 interface PitchLabDisplayProps {
   frequency: number;
+  confidence: number;
   refA4: number;
   selectedTuning: string;
   onTuningPress?: () => void;
@@ -131,6 +136,7 @@ function parseStringLabel(label: string): { note: string; octave: number } {
 // depois que o som some, para nao piscar.
 function useStringTuner(
   frequency: number,
+  confidence: number,
   calStringFreqs: number[],
   lockedIndex: number | null
 ) {
@@ -150,7 +156,8 @@ function useStringTuner(
   }, [lockedIndex]);
 
   useEffect(() => {
-    const hasRawSignal = frequency > 50;
+    // So conta como sinal se houver uma nota CLARA (evita travar em ruido ambiente)
+    const hasRawSignal = frequency > 50 && confidence >= CONFIDENCE_MIN;
 
     if (hasRawSignal) {
       // Corda alvo: a travada, ou a mais proxima dentro da tolerancia
@@ -200,7 +207,7 @@ function useStringTuner(
         setDisplay({ index: lockedIndex, cents: 0, hasSignal: false });
       }, NOTE_HOLD_MS);
     }
-  }, [frequency, calStringFreqs, lockedIndex]);
+  }, [frequency, confidence, calStringFreqs, lockedIndex]);
 
   useEffect(() => {
     return () => {
@@ -357,6 +364,7 @@ function StringHitTargets({
 
 function PitchLabDisplayComponent({
   frequency,
+  confidence,
   refA4,
   selectedTuning,
   onTuningPress,
@@ -385,7 +393,7 @@ function PitchLabDisplayComponent({
 
   const isLocked = lockedStringIndex !== null;
 
-  const tuner = useStringTuner(frequency, calStringFreqs, lockedStringIndex);
+  const tuner = useStringTuner(frequency, confidence, calStringFreqs, lockedStringIndex);
 
   const activeStringIndex = tuner.index;
   const hasSignal = tuner.hasSignal;

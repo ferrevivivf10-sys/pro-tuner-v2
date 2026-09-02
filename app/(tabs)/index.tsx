@@ -84,6 +84,7 @@ export default function TunerScreen() {
         <View style={styles.displayArea}>
           <PitchLabDisplay
             frequency={pitchData.frequency}
+            confidence={pitchData.confidence}
             refA4={settings?.refA4 ?? 440}
             selectedTuning={settings?.selectedTuning ?? "Standard"}
             onTuningPress={() => setTuningModalVisible(true)}
