@@ -46,7 +46,12 @@ azul, vermelho, verde, ouro, roxo, ciano. Apenas a corda ativa brilha.
 - Microfone captura PCM em tempo real (nativo via `@siteed/audio-studio`, web via
   Web Audio API)
 - MPM (NSDF) detecta a frequência fundamental
-- Suavização de exibição: hold da nota, média móvel de cents e debounce de troca
+- A nota grande é a da **corda** mais próxima da afinação (não a cromática); os
+  cents são medidos contra a frequência dessa corda, já **corrigida pela
+  calibração A4** (432/440/…)
+- Indicador de ação no centro do anel: **AFROUXAR** (agudo) / **APERTAR** (grave)
+  / **AFINADO**
+- Suavização de exibição: hold da nota (600 ms) e média móvel de cents
 - Modo manual de trava de corda (string-lock) tocando na corda desejada
 
 ### 2. SettingsScreen (tab: Settings)
@@ -91,7 +96,7 @@ azul, vermelho, verde, ouro, roxo, ciano. Apenas a corda ativa brilha.
 
 | Componente | Arquivo | Descrição |
 |-----------|---------|-----------|
-| `PitchLabDisplay` | `src/components/PitchLabDisplay.tsx` | Display OLED: nota, cents, cordas e trava manual |
+| `PitchLabDisplay` | `src/components/PitchLabDisplay.tsx` | Display OLED: nota da corda, cents calibrados, indicador afrouxar/apertar e trava manual |
 | `TunerScreen` | `app/(tabs)/index.tsx` | Tela principal + modal de afinação |
 | `SettingsScreen` | `app/(tabs)/settings.tsx` | Calibração A4 e afinações |
 | `usePitchDetectorFinal` | `src/hooks/usePitchDetectorFinal.ts` | Captura de áudio + detecção |
