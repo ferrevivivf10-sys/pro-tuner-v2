@@ -1,11 +1,12 @@
 /**
- * PitchLabDisplay v9 - v8 + suavizacao de exibicao
+ * PitchLabDisplay v10 - afinador por corda (com calibracao A4 correta)
  * - Fundo OLED (#000000 puro)
- * - Nota grande (100px+)
- * - Linhas das cordas atravessam a tela toda (como um violao)
- * - Cada corda tem cor cromatica fixa por posicao; so a ativa brilha
- * - Deteccao da corda ativa pela menor distancia em cents (respeita afinacao)
- * - NOVO v9: hold da nota (600ms), media movel de cents, debounce de troca de nota (180ms)
+ * - A nota grande e a da CORDA ativa da afinacao (nao a cromatica mais proxima)
+ * - Cents medidos contra a frequencia da corda, ja corrigida pela referencia A4
+ * - Indicador de acao no centro: AFROUXAR (agudo) / APERTAR (grave) / AFINADO
+ * - Linhas das cordas atravessam a tela toda; so a ativa brilha
+ * - Trava manual: tocar no nome de uma corda fixa a leitura nela
+ * - Suavizacao: hold da nota (600ms) e media movel de cents
  */
 
 import React, { useEffect, useRef, memo, useMemo, useState, useCallback } from "react";
@@ -43,13 +44,17 @@ const BASE_Y = RING_CY - ((CHORD_COUNT - 1) * CHORD_SPACING) / 2;
 
 // Largura das linhas das cordas: ocupa a tela toda (ponta a ponta)
 const STRING_AREA_WIDTH = SCREEN_WIDTH;
-const STRING_CX = STRING_AREA_WIDTH / 2;
 
-// ===== Parametros de SUAVIZACAO (v9) =====
+// ===== Parametros de SUAVIZACAO =====
 const NOTE_HOLD_MS = 600;        // tempo que a nota permanece apos o som sumir
-const NOTE_SWITCH_MS = 180;      // nova nota precisa persistir esse tempo p/ trocar
 const CENTS_SMOOTH_SIZE = 5;     // media movel das ultimas N leituras de cents
 const LOCK_HIT_HEIGHT = 40;      // altura da area de toque de cada corda (modo manual)
+const STRING_GUARD_CENTS = 250;  // ~metade da distancia entre cordas; acima disso o sinal esta longe de qualquer corda
+const IN_TUNE_CENTS = 5;         // |cents| < isso => afinado
+// Clareza minima (0-1) do MPM para considerar que ha uma NOTA real, e nao ruido
+// ambiente. Ajustavel: menor = mais sensivel (pega notas fracas, mas trava mais
+// em ruido); maior = so notas bem definidas.
+const CONFIDENCE_MIN = 0.6;
 
 // Cores cromaticas fixas por POSICAO da corda (0 = mais grave ... 5 = mais aguda)
 const STRING_COLORS = [
@@ -69,36 +74,50 @@ const TUNING_STRING_NAMES: Record<string, string[]> = {
   OpenG: ["E2", "G2", "D3", "G3", "B3", "G4"],
 };
 
-// Frequencias de referencia (Hz) para cada nota de corda usada nas afinacoes
-const STRING_FREQUENCIES: Record<string, number> = {
-  E2: 82.41,
-  A2: 110.0,
-  D3: 146.83,
-  G3: 196.0,
-  B3: 246.94,
-  E4: 329.63,
-  D2: 73.42,
-  G2: 98.0,
-  C3: 130.81,
-  F3: 174.61,
-  A3: 220.0,
-  D4: 293.66,
-  G4: 392.0,
-  Eb2: 77.78,
-  Ab2: 103.83,
-  Db3: 138.59,
-  Gb3: 185.0,
-  Bb3: 233.08,
-  Eb4: 311.13,
+// Numero MIDI de cada nota de corda usada nas afinacoes. A frequencia e
+// derivada em runtime a partir da referencia A4 (calibracao), para que 432 Hz,
+// 440 Hz etc. produzam alvos corretos.
+const STRING_MIDI: Record<string, number> = {
+  D2: 38,
+  Eb2: 39,
+  E2: 40,
+  F2: 41,
+  Gb2: 42,
+  G2: 43,
+  Ab2: 44,
+  A2: 45,
+  Bb2: 46,
+  B2: 47,
+  C3: 48,
+  Db3: 49,
+  D3: 50,
+  Eb3: 51,
+  E3: 52,
+  F3: 53,
+  Gb3: 54,
+  G3: 55,
+  Ab3: 56,
+  A3: 57,
+  Bb3: 58,
+  B3: 59,
+  C4: 60,
+  Db4: 61,
+  D4: 62,
+  Eb4: 63,
+  E4: 64,
+  G4: 67,
 };
 
+function stringFreq(name: string, refA4: number): number {
+  const midi = STRING_MIDI[name];
+  if (midi == null) return 0;
+  return refA4 * Math.pow(2, (midi - 69) / 12);
+}
+
 interface PitchLabDisplayProps {
-  note: string;
-  octave: number;
   frequency: number;
-  cents: number;
-  inTune: boolean;
   confidence: number;
+  refA4: number;
   selectedTuning: string;
   onTuningPress?: () => void;
 }
@@ -110,51 +129,85 @@ function parseStringLabel(label: string): { note: string; octave: number } {
   return { note: match[1], octave: parseInt(match[2], 10) };
 }
 
-// ===== Modo por corda (manual) =====
-// Quando o usuario trava numa corda especifica, os cents passam a ser
-// calculados sempre contra a frequencia daquela corda (nao contra a nota
-// cromatica mais proxima), para nao "confundir" nota quando o instrumento
-// esta muito desafinado.
-function useLockedCents(frequency: number, targetFreq: number | null) {
-  const [display, setDisplay] = React.useState({ cents: 0, hasSignal: false });
+// ===== Hook do afinador por corda =====
+// A partir da frequencia crua, escolhe a corda alvo (a travada manualmente ou a
+// mais proxima em cents) e devolve os cents suavizados contra ela. Nao altera a
+// deteccao, so o que aparece na tela. Segura o ultimo valor por NOTE_HOLD_MS
+// depois que o som some, para nao piscar.
+function useStringTuner(
+  frequency: number,
+  confidence: number,
+  calStringFreqs: number[],
+  lockedIndex: number | null
+) {
+  const [display, setDisplay] = useState<{
+    index: number | null;
+    cents: number;
+    hasSignal: boolean;
+  }>({ index: lockedIndex, cents: 0, hasSignal: false });
+
   const centsBufferRef = useRef<number[]>([]);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentIndexRef = useRef<number | null>(null);
 
+  // Troca de corda travada / afinacao: zera a suavizacao
   useEffect(() => {
     centsBufferRef.current = [];
-    if (holdTimerRef.current) {
-      clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
-    setDisplay({ cents: 0, hasSignal: false });
-  }, [targetFreq]);
+  }, [lockedIndex]);
 
   useEffect(() => {
-    if (!targetFreq) return;
-
-    const hasRawSignal = frequency > 50;
+    // So conta como sinal se houver uma nota CLARA (evita travar em ruido ambiente)
+    const hasRawSignal = frequency > 50 && confidence >= CONFIDENCE_MIN;
 
     if (hasRawSignal) {
-      if (holdTimerRef.current) {
-        clearTimeout(holdTimerRef.current);
-        holdTimerRef.current = null;
+      // Corda alvo: a travada, ou a mais proxima dentro da tolerancia
+      let idx: number | null = lockedIndex;
+      if (idx == null) {
+        let best: number | null = null;
+        let bestDist = Infinity;
+        for (let i = 0; i < calStringFreqs.length; i++) {
+          const t = calStringFreqs[i];
+          if (!t) continue;
+          const d = Math.abs(1200 * Math.log2(frequency / t));
+          if (d < bestDist) {
+            bestDist = d;
+            best = i;
+          }
+        }
+        if (best != null && bestDist <= STRING_GUARD_CENTS) idx = best;
       }
 
-      const rawCents = 1200 * Math.log2(frequency / targetFreq);
-      const buf = centsBufferRef.current;
-      buf.push(rawCents);
-      if (buf.length > CENTS_SMOOTH_SIZE) buf.shift();
-      const avgCents = buf.reduce((a, b) => a + b, 0) / buf.length;
+      if (idx != null) {
+        if (holdTimerRef.current) {
+          clearTimeout(holdTimerRef.current);
+          holdTimerRef.current = null;
+        }
+        if (idx !== currentIndexRef.current) {
+          currentIndexRef.current = idx;
+          centsBufferRef.current = [];
+        }
+        const target = calStringFreqs[idx];
+        const rawCents = 1200 * Math.log2(frequency / target);
+        const buf = centsBufferRef.current;
+        buf.push(rawCents);
+        if (buf.length > CENTS_SMOOTH_SIZE) buf.shift();
+        const avg = buf.reduce((a, b) => a + b, 0) / buf.length;
+        setDisplay({ index: idx, cents: avg, hasSignal: true });
+        return;
+      }
+      // Sinal presente mas longe de qualquer corda: cai para o hold abaixo
+    }
 
-      setDisplay({ cents: avgCents, hasSignal: true });
-    } else if (!holdTimerRef.current) {
+    // Sem sinal (ou longe de tudo): segura por NOTE_HOLD_MS e entao limpa
+    if (!holdTimerRef.current && currentIndexRef.current != null) {
       holdTimerRef.current = setTimeout(() => {
+        currentIndexRef.current = null;
         centsBufferRef.current = [];
         holdTimerRef.current = null;
-        setDisplay({ cents: 0, hasSignal: false });
+        setDisplay({ index: lockedIndex, cents: 0, hasSignal: false });
       }, NOTE_HOLD_MS);
     }
-  }, [frequency, targetFreq]);
+  }, [frequency, confidence, calStringFreqs, lockedIndex]);
 
   useEffect(() => {
     return () => {
@@ -163,157 +216,6 @@ function useLockedCents(frequency: number, targetFreq: number | null) {
   }, []);
 
   return display;
-}
-
-// ===== Hook de suavizacao (v9) =====
-// Recebe os dados crus do detector e devolve dados "suaves" para exibicao.
-// Nao altera a deteccao em si, apenas o que aparece na tela.
-function useSmoothedPitch(
-  note: string,
-  octave: number,
-  frequency: number,
-  cents: number,
-  inTune: boolean
-) {
-  const [display, setDisplay] = React.useState({
-    note: "-",
-    octave: 0,
-    frequency: 0,
-    cents: 0,
-    inTune: false,
-    hasSignal: false,
-  });
-
-  const lastSignalAtRef = useRef(0);
-  const candidateRef = useRef<{ key: string; since: number } | null>(null);
-  const centsBufferRef = useRef<number[]>([]);
-  const currentKeyRef = useRef("");
-  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    const now = Date.now();
-    const hasRawSignal = frequency > 50;
-
-    if (hasRawSignal) {
-      lastSignalAtRef.current = now;
-      if (holdTimerRef.current) {
-        clearTimeout(holdTimerRef.current);
-        holdTimerRef.current = null;
-      }
-
-      const incomingKey = note + octave;
-
-      if (incomingKey === currentKeyRef.current) {
-        // Mesma nota: so suaviza cents/frequencia (media movel)
-        const buf = centsBufferRef.current;
-        buf.push(cents);
-        if (buf.length > CENTS_SMOOTH_SIZE) buf.shift();
-        const avgCents = buf.reduce((a, b) => a + b, 0) / buf.length;
-
-        candidateRef.current = null;
-        setDisplay({
-          note,
-          octave,
-          frequency,
-          cents: avgCents,
-          inTune,
-          hasSignal: true,
-        });
-      } else {
-        // Nota diferente: so troca se persistir por NOTE_SWITCH_MS
-        if (
-          !candidateRef.current ||
-          candidateRef.current.key !== incomingKey
-        ) {
-          candidateRef.current = { key: incomingKey, since: now };
-        } else if (now - candidateRef.current.since >= NOTE_SWITCH_MS) {
-          // Confirmou a troca: reseta buffer p/ nao arrastar cents da nota antiga
-          currentKeyRef.current = incomingKey;
-          centsBufferRef.current = [cents];
-          candidateRef.current = null;
-          setDisplay({
-            note,
-            octave,
-            frequency,
-            cents,
-            inTune,
-            hasSignal: true,
-          });
-        }
-        // Enquanto nao confirma, mantem a nota atual na tela (nao faz nada)
-      }
-    } else {
-      // Sinal sumiu: segura a nota atual por NOTE_HOLD_MS antes de limpar
-      candidateRef.current = null;
-      if (!holdTimerRef.current && currentKeyRef.current !== "") {
-        holdTimerRef.current = setTimeout(() => {
-          currentKeyRef.current = "";
-          centsBufferRef.current = [];
-          holdTimerRef.current = null;
-          setDisplay({
-            note: "-",
-            octave: 0,
-            frequency: 0,
-            cents: 0,
-            inTune: false,
-            hasSignal: false,
-          });
-        }, NOTE_HOLD_MS);
-      }
-    }
-  }, [note, octave, frequency, cents, inTune]);
-
-  // Primeira deteccao de todas (currentKey vazio): aceita direto
-  useEffect(() => {
-    if (frequency > 50 && currentKeyRef.current === "") {
-      currentKeyRef.current = note + octave;
-      centsBufferRef.current = [cents];
-      candidateRef.current = null;
-      setDisplay({
-        note,
-        octave,
-        frequency,
-        cents,
-        inTune,
-        hasSignal: true,
-      });
-    }
-  }, [note, octave, frequency, cents, inTune]);
-
-  useEffect(() => {
-    return () => {
-      if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
-    };
-  }, []);
-
-  return display;
-}
-
-// Escolhe a corda da afinacao ativa mais proxima da frequencia detectada,
-// medindo distancia em cents (nao em Hz absolutos).
-function getActiveStringIndex(
-  frequency: number,
-  tuningNames: string[]
-): number | null {
-  if (frequency <= 0) return null;
-
-  let bestIndex: number | null = null;
-  let bestDistance = Infinity;
-
-  for (let i = 0; i < tuningNames.length; i++) {
-    const target = STRING_FREQUENCIES[tuningNames[i]];
-    if (!target) continue;
-    const distCents = Math.abs(1200 * Math.log2(frequency / target));
-    if (distCents < bestDistance) {
-      bestDistance = distCents;
-      bestIndex = i;
-    }
-  }
-
-  // Guarda: ignora sinal lixo/harmonico longe de qualquer corda
-  if (bestDistance > 150) return null;
-
-  return bestIndex;
 }
 
 function RingTicks() {
@@ -461,20 +363,20 @@ function StringHitTargets({
 }
 
 function PitchLabDisplayComponent({
-  note,
-  octave,
   frequency,
-  cents,
-  inTune,
   confidence,
+  refA4,
   selectedTuning,
   onTuningPress,
 }: PitchLabDisplayProps) {
-  // ===== v9: tudo que aparece na tela vem da versao suavizada =====
-  const smooth = useSmoothedPitch(note, octave, frequency, cents, inTune);
-
   const tuningNames =
     TUNING_STRING_NAMES[selectedTuning] ?? TUNING_STRING_NAMES.Standard;
+
+  // Frequencias das cordas ja corrigidas pela calibracao A4 escolhida.
+  const calStringFreqs = useMemo(
+    () => tuningNames.map((n) => stringFreq(n, refA4)),
+    [tuningNames, refA4]
+  );
 
   // ===== Modo por corda (manual) =====
   // Tocar no nome de uma corda trava a leitura naquela corda especifica;
@@ -490,32 +392,32 @@ function PitchLabDisplayComponent({
   }, []);
 
   const isLocked = lockedStringIndex !== null;
-  const lockedTargetFreq =
-    lockedStringIndex !== null
-      ? STRING_FREQUENCIES[tuningNames[lockedStringIndex]] ?? null
+
+  const tuner = useStringTuner(frequency, confidence, calStringFreqs, lockedStringIndex);
+
+  const activeStringIndex = tuner.index;
+  const hasSignal = tuner.hasSignal;
+  const displayCents = tuner.cents;
+  const displayInTune = hasSignal && Math.abs(displayCents) < IN_TUNE_CENTS;
+
+  // Nota exibida = a da corda ativa (ou travada)
+  const label =
+    activeStringIndex != null
+      ? parseStringLabel(tuningNames[activeStringIndex])
       : null;
-  const locked = useLockedCents(frequency, lockedTargetFreq);
+  const displayNote = label ? label.note : "-";
+  const displayOctave = label ? label.octave : 0;
+  const displayFrequency = hasSignal ? frequency : 0;
 
-  const hasSignal = isLocked ? locked.hasSignal : smooth.hasSignal;
-  const displayCents = isLocked ? locked.cents : smooth.cents;
-  const displayInTune = hasSignal && Math.abs(displayCents) < 10;
-  const displayFrequency = isLocked ? frequency : smooth.frequency;
-
-  const lockedLabel = isLocked ? parseStringLabel(tuningNames[lockedStringIndex]) : null;
-  const displayNote = isLocked ? lockedLabel!.note : smooth.note;
-  const displayOctave = isLocked ? lockedLabel!.octave : smooth.octave;
-
-  const [inTuneVisible, setInTuneVisible] = React.useState(false);
-
-  useEffect(() => {
-    setInTuneVisible(displayInTune);
-  }, [displayInTune]);
-
-  const autoActiveStringIndex = useMemo(
-    () => getActiveStringIndex(smooth.frequency, tuningNames),
-    [smooth.frequency, tuningNames]
-  );
-  const activeStringIndex = isLocked ? lockedStringIndex : autoActiveStringIndex;
+  // Indicador de acao no centro do anel
+  // agudo (cents > 0) => AFROUXAR (baixa o tom) ; grave => APERTAR (sobe o tom)
+  const action = !hasSignal
+    ? null
+    : displayInTune
+      ? { text: "AFINADO", color: "#00E676", arrow: "" }
+      : displayCents > 0
+        ? { text: "AFROUXAR", color: "#FFB300", arrow: " ▼" }
+        : { text: "APERTAR", color: "#FFB300", arrow: " ▲" };
 
   return (
     <View style={styles.wrapper}>
@@ -524,10 +426,16 @@ function PitchLabDisplayComponent({
         <Text
           style={[
             styles.noteChar,
-            { color: displayInTune ? "#00E676" : "#FFFFFF" },
+            {
+              color: !hasSignal && !isLocked
+                ? "#2A2A2A"
+                : displayInTune
+                  ? "#00E676"
+                  : "#FFFFFF",
+            },
           ]}
         >
-          {hasSignal || isLocked ? displayNote : "-"}
+          {hasSignal || isLocked ? displayNote : "–"}
         </Text>
         {(hasSignal || isLocked) && displayOctave > 0 && (
           <Text
@@ -600,14 +508,17 @@ function PitchLabDisplayComponent({
           </TouchableOpacity>
         )}
 
-        {/* IN TUNE */}
-        {inTuneVisible && (
-          <View style={styles.inTuneBadge} pointerEvents="none">
-            <Text style={styles.inTuneText}>IN TUNE!</Text>
+        {/* Indicador de acao (AFROUXAR / APERTAR / AFINADO) */}
+        {action && (
+          <View style={styles.actionWrap} pointerEvents="none">
+            <Text style={[styles.actionText, { color: action.color }]}>
+              {action.text}
+              {action.arrow}
+            </Text>
           </View>
         )}
 
-        {/* Cents */}
+        {/* Cents (numerico) no canto */}
         {hasSignal && (
           <View style={styles.centsCorner} pointerEvents="none">
             <Text
@@ -630,7 +541,7 @@ function PitchLabDisplayComponent({
         activeOpacity={0.7}
       >
         <Text style={styles.tuningText}>{selectedTuning}</Text>
-        <Text style={styles.tuningArrow}>{"\u25BC"}</Text>
+        <Text style={styles.tuningArrow}>{"▼"}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -720,20 +631,17 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.5,
   },
-  inTuneBadge: {
+  actionWrap: {
     position: "absolute",
-    top: RING_CY - 20,
+    top: RING_CY - 16,
     alignSelf: "center",
     paddingHorizontal: 12,
     paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: "transparent",
   },
-  inTuneText: {
-    color: "#00E676",
-    fontSize: 18,
+  actionText: {
+    fontSize: 22,
     fontWeight: "bold",
-    letterSpacing: 2.5,
+    letterSpacing: 2,
   },
   centsCorner: { position: "absolute", top: 24, right: 24 },
   centsCornerText: { fontSize: 14, fontWeight: "bold", letterSpacing: 0.5 },

@@ -1,26 +1,9 @@
-// Load environment variables with proper priority (system > .env)
-import "./scripts/load-env.js";
 import type { ExpoConfig } from "expo/config";
-const rawBundleId = "com.app.protunermobile";
-const bundleId =
-  rawBundleId
-    .replace(/[-_]/g, ".")
-    .replace(/[^a-zA-Z0-9.]/g, "")
-    .replace(/\.+/g, ".")
-    .replace(/^\.+|\.+$/g, "")
-    .toLowerCase()
-    .split(".")
-    .map((segment) => {
-      return /^[a-zA-Z]/.test(segment) ? segment : "x" + segment;
-    })
-    .join(".") || "space.manus.app";
-const timestamp = bundleId.split(".").pop()?.replace(/^t/, "") ?? "";
-const schemeFromBundleId = `manus${timestamp}`;
+const bundleId = "com.app.protunermobile";
 const env = {
   appName: "Pro Tuner",
   appSlug: "pro-tuner-mobile",
-  logoUrl: "https://d2xsxph8kpxj0f.cloudfront.net/310519663753811264/RuwpvbBq6583Ec7qhGNSbU/icon-Y924WNi5WNNSTD6eLjBGzz.webp",
-  scheme: schemeFromBundleId,
+  scheme: "protuner",
   iosBundleId: bundleId,
   androidPackage: bundleId,
 };
@@ -50,7 +33,7 @@ const config: ExpoConfig = {
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
     package: env.androidPackage,
-    permissions: ["POST_NOTIFICATIONS", "RECORD_AUDIO"],
+    permissions: ["RECORD_AUDIO"],
     intentFilters: [
       {
         action: "VIEW",
@@ -78,13 +61,6 @@ const config: ExpoConfig = {
       "expo-audio",
       {
         microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone.",
-      },
-    ],
-    [
-      "expo-video",
-      {
-        supportsBackgroundPlayback: true,
-        supportsPictureInPicture: true,
       },
     ],
     [
