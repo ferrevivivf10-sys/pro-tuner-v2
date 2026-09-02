@@ -103,7 +103,7 @@ src/
 components/              UI compartilhada (ScreenContainer, ícones, tab háptica)
 constants/theme.ts      Tema
 hooks/                  use-colors, use-color-scheme
-lib/                    theme-provider, utils, runtime web (manus-runtime)
+lib/                    theme-provider, utils, tema
 ```
 
 ---
