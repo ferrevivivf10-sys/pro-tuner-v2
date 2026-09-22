@@ -1,0 +1,60 @@
+name: Build Android APK
+
+# Compila um APK de debug (instalavel direto, sem assinatura de release) na
+# nuvem do GitHub — nao precisa de PC, conta Expo nem token.
+# - Roda automaticamente a cada push nesta branch de trabalho.
+# - Ou dispare manualmente: aba "Actions" > "Build Android APK" > "Run workflow".
+# Ao terminar, baixe o APK em "Artifacts" na pagina da execucao.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/unused-files-obsolete-functions-qscu8c
+    paths-ignore:
+      - "**/*.md"
+
+concurrency:
+  group: android-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Java (JDK 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Prebuild (gera o projeto android/)
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Build debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: pro-tuner-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
