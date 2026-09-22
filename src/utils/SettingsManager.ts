@@ -15,7 +15,7 @@ const STORAGE_KEY = "@pro_tuner_settings";
 const DEFAULT_SETTINGS: TunerSettings = {
   refA4: 440,
   selectedTuning: "Standard",
-  sensitivity: 0.8,
+  sensitivity: 0.7,
   noiseThreshold: 0.005,
 };
 

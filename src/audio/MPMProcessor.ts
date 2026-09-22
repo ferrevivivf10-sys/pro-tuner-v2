@@ -1,11 +1,19 @@
 /**
  * MPMProcessor - McLeod Pitch Method para deteccao de pitch de guitarra
- * Substitui o YIN puro: usa a NSDF (Normalized Square Difference Function) e
- * escolhe o PRIMEIRO pico (menor lag) acima de um limiar relativo ao maior
- * pico encontrado - isso evita o erro classico de "cair" numa subharmonica
- * (oitava abaixo), que e o principal ponto fraco do YIN simples.
+ * Usa a NSDF (Normalized Square Difference Function) e escolhe o PRIMEIRO pico
+ * (menor lag) acima de um limiar relativo ao maior pico - isso evita o erro
+ * classico de "cair" numa subharmonica (oitava abaixo), ponto fraco do YIN.
  * Retorna tambem a "clareza" (0-1): o quao periodico e o sinal, usada como
  * confidence real (nao um proxy de volume).
+ *
+ * PERFORMANCE: a NSDF e O(n^2). Rodar a faixa inteira de lags na taxa cheia
+ * custava ~1.2M iteracoes por janela, o que saturava a thread JS (Hermes nao
+ * tem JIT) e travava a UI. Por isso a busca e feita em DOIS ESTAGIOS:
+ *   1. grosseiro: sinal decimado (44.1k -> 11k), varre todos os lags e escolhe
+ *      o pico (e onde a decisao de oitava acontece);
+ *   2. refino: NSDF na taxa CHEIA so numa janela estreita ao redor do lag
+ *      escolhido + interpolacao parabolica, preservando a precisao em cents.
+ * Custo total ~100k iteracoes: ~11x mais barato, mesma precisao.
  */
 const MIN_FREQ = 60;    // abaixo do E2 (~82Hz) com margem
 const MAX_FREQ = 1200;  // acima do E4 (~330Hz) e harmonicos
@@ -13,6 +21,8 @@ const CLARITY_THRESHOLD = 0.85; // fracao do maior pico exigida pra aceitar um p
 const MIN_CLARITY_ACCEPT = 0.3; // abaixo disso o sinal nao e periodico o suficiente, descarta
 const TARGET_RMS = 0.15;        // nivel alvo apos normalizacao
 const MIN_RMS = 0.0008;         // abaixo disso e silencio real, ignora
+const DECIMATION = 4;           // 44.1kHz -> ~11kHz no estagio grosseiro
+const REFINE_SPAN = DECIMATION * 2; // +/- amostras (taxa cheia) varridas no refino
 
 export interface PitchResult {
   frequency: number;
@@ -34,6 +44,21 @@ export class MPMProcessor {
     const out = new Float32Array(signal.length);
     for (let i = 0; i < signal.length; i++) {
       out[i] = signal[i] * gain;
+    }
+    return out;
+  }
+
+  // Decimacao com media movel de `factor` amostras (anti-aliasing simples).
+  // A faixa de interesse (60-1200 Hz) fica muito abaixo do novo Nyquist
+  // (~5.5 kHz), entao a media basta para o estagio grosseiro.
+  private static decimate(signal: Float32Array, factor: number): Float32Array {
+    const outLen = Math.floor(signal.length / factor);
+    const out = new Float32Array(outLen);
+    for (let i = 0; i < outLen; i++) {
+      const base = i * factor;
+      let s = 0;
+      for (let j = 0; j < factor; j++) s += signal[base + j];
+      out[i] = s / factor;
     }
     return out;
   }
@@ -77,19 +102,23 @@ export class MPMProcessor {
     const signal = this.normalize(rawSignal);
     if (!signal) return NO_PITCH; // silencio real
 
-    const minLag = Math.max(2, Math.floor(sampleRate / MAX_FREQ));
-    const maxLag = Math.min(
-      Math.floor(signal.length / 2),
-      Math.floor(sampleRate / MIN_FREQ)
-    );
-    if (maxLag <= minLag + 1) return NO_PITCH;
+    // ===== Estagio 1: busca grosseira no sinal decimado =====
+    const coarse = this.decimate(signal, DECIMATION);
+    const coarseRate = sampleRate / DECIMATION;
 
-    const nsdf = this.computeNSDF(signal, minLag, maxLag);
+    const cMinLag = Math.max(2, Math.floor(coarseRate / MAX_FREQ));
+    const cMaxLag = Math.min(
+      Math.floor(coarse.length / 2),
+      Math.floor(coarseRate / MIN_FREQ)
+    );
+    if (cMaxLag <= cMinLag + 1) return NO_PITCH;
+
+    const cNsdf = this.computeNSDF(coarse, cMinLag, cMaxLag);
 
     // Picos locais: pontos onde a NSDF sobe e depois desce.
     const peakLags: number[] = [];
-    for (let i = minLag + 1; i < maxLag; i++) {
-      if (nsdf[i - 1] < nsdf[i] && nsdf[i] >= nsdf[i + 1]) {
+    for (let i = cMinLag + 1; i < cMaxLag; i++) {
+      if (cNsdf[i - 1] < cNsdf[i] && cNsdf[i] >= cNsdf[i + 1]) {
         peakLags.push(i);
       }
     }
@@ -97,27 +126,48 @@ export class MPMProcessor {
 
     let maxValue = -Infinity;
     for (const lag of peakLags) {
-      if (nsdf[lag] > maxValue) maxValue = nsdf[lag];
+      if (cNsdf[lag] > maxValue) maxValue = cNsdf[lag];
     }
-    if (maxValue < MIN_CLARITY_ACCEPT) return NO_PITCH; // sinal nao periodico o suficiente
+    if (maxValue < MIN_CLARITY_ACCEPT) return NO_PITCH; // nao periodico o suficiente
 
     // Escolhe o PRIMEIRO pico (menor lag = maior frequencia) que seja "bom o
     // suficiente" perto do maior pico - evita cair na subharmonica (oitava abaixo).
     const actualThreshold = maxValue * CLARITY_THRESHOLD;
     let chosenLag = peakLags[0];
     for (const lag of peakLags) {
-      if (nsdf[lag] >= actualThreshold) {
+      if (cNsdf[lag] >= actualThreshold) {
         chosenLag = lag;
         break;
       }
     }
 
-    const refinedLag = this.parabolicInterpolate(nsdf, chosenLag);
+    // ===== Estagio 2: refino em taxa cheia ao redor do lag escolhido =====
+    const center = chosenLag * DECIMATION;
+    const half = Math.floor(signal.length / 2);
+    // +1 de folga de cada lado pra interpolacao ter vizinhos validos
+    const fLo = Math.max(2, center - REFINE_SPAN - 1);
+    const fHi = Math.min(half, center + REFINE_SPAN + 1);
+    if (fHi <= fLo + 1) return NO_PITCH;
+
+    const fNsdf = this.computeNSDF(signal, fLo, fHi);
+
+    // Melhor lag no interior do intervalo (garante vizinhos calculados)
+    let bestLag = -1;
+    let bestVal = -Infinity;
+    for (let tau = fLo + 1; tau <= fHi - 1; tau++) {
+      if (fNsdf[tau] > bestVal) {
+        bestVal = fNsdf[tau];
+        bestLag = tau;
+      }
+    }
+    if (bestLag < 0) return NO_PITCH;
+
+    const refinedLag = this.parabolicInterpolate(fNsdf, bestLag);
     if (refinedLag <= 0) return NO_PITCH;
 
     return {
       frequency: sampleRate / refinedLag,
-      clarity: Math.max(0, Math.min(1, nsdf[chosenLag])),
+      clarity: Math.max(0, Math.min(1, bestVal)),
     };
   }
 }
