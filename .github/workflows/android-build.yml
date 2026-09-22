@@ -29,7 +29,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Setup Java (JDK 17)
@@ -38,8 +38,8 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      # O runner ubuntu-latest ja traz o Android SDK (ANDROID_HOME/licencas
+      # aceitas); o Gradle baixa build-tools/NDK que faltarem por conta propria.
 
       - name: Install dependencies
         run: npm install
