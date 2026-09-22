@@ -51,10 +51,17 @@ const CENTS_SMOOTH_SIZE = 5;     // media movel das ultimas N leituras de cents
 const LOCK_HIT_HEIGHT = 40;      // altura da area de toque de cada corda (modo manual)
 const STRING_GUARD_CENTS = 250;  // ~metade da distancia entre cordas; acima disso o sinal esta longe de qualquer corda
 const IN_TUNE_CENTS = 5;         // |cents| < isso => afinado
-// Clareza minima (0-1) do MPM para considerar que ha uma NOTA real, e nao ruido
-// ambiente. Ajustavel: menor = mais sensivel (pega notas fracas, mas trava mais
-// em ruido); maior = so notas bem definidas.
-const CONFIDENCE_MIN = 0.6;
+// Limiar de clareza (0-1) do MPM para considerar que ha uma NOTA real, e nao
+// ruido ambiente. E derivado da "sensibilidade" (0-1) escolhida nas Config.:
+// sensibilidade ALTA => limiar BAIXO (pega notas fracas, mas trava mais em ruido)
+// sensibilidade BAIXA => limiar ALTO (so notas bem definidas)
+const CONFIDENCE_MIN_AT_ZERO = 0.85; // sensibilidade 0
+const CONFIDENCE_SENS_RANGE = 0.5; // quanto a sensibilidade abaixa o limiar
+
+function confidenceThreshold(sensitivity: number): number {
+  const s = Math.max(0, Math.min(1, sensitivity));
+  return CONFIDENCE_MIN_AT_ZERO - CONFIDENCE_SENS_RANGE * s;
+}
 
 // Cores cromaticas fixas por POSICAO da corda (0 = mais grave ... 5 = mais aguda)
 const STRING_COLORS = [
@@ -117,6 +124,7 @@ function stringFreq(name: string, refA4: number): number {
 interface PitchLabDisplayProps {
   frequency: number;
   confidence: number;
+  sensitivity: number;
   refA4: number;
   selectedTuning: string;
   onTuningPress?: () => void;
@@ -137,6 +145,7 @@ function parseStringLabel(label: string): { note: string; octave: number } {
 function useStringTuner(
   frequency: number,
   confidence: number,
+  confidenceMin: number,
   calStringFreqs: number[],
   lockedIndex: number | null
 ) {
@@ -157,7 +166,7 @@ function useStringTuner(
 
   useEffect(() => {
     // So conta como sinal se houver uma nota CLARA (evita travar em ruido ambiente)
-    const hasRawSignal = frequency > 50 && confidence >= CONFIDENCE_MIN;
+    const hasRawSignal = frequency > 50 && confidence >= confidenceMin;
 
     if (hasRawSignal) {
       // Corda alvo: a travada, ou a mais proxima dentro da tolerancia
@@ -207,7 +216,7 @@ function useStringTuner(
         setDisplay({ index: lockedIndex, cents: 0, hasSignal: false });
       }, NOTE_HOLD_MS);
     }
-  }, [frequency, confidence, calStringFreqs, lockedIndex]);
+  }, [frequency, confidence, confidenceMin, calStringFreqs, lockedIndex]);
 
   useEffect(() => {
     return () => {
@@ -365,12 +374,18 @@ function StringHitTargets({
 function PitchLabDisplayComponent({
   frequency,
   confidence,
+  sensitivity,
   refA4,
   selectedTuning,
   onTuningPress,
 }: PitchLabDisplayProps) {
   const tuningNames =
     TUNING_STRING_NAMES[selectedTuning] ?? TUNING_STRING_NAMES.Standard;
+
+  const confidenceMin = useMemo(
+    () => confidenceThreshold(sensitivity),
+    [sensitivity]
+  );
 
   // Frequencias das cordas ja corrigidas pela calibracao A4 escolhida.
   const calStringFreqs = useMemo(
@@ -393,7 +408,13 @@ function PitchLabDisplayComponent({
 
   const isLocked = lockedStringIndex !== null;
 
-  const tuner = useStringTuner(frequency, confidence, calStringFreqs, lockedStringIndex);
+  const tuner = useStringTuner(
+    frequency,
+    confidence,
+    confidenceMin,
+    calStringFreqs,
+    lockedStringIndex
+  );
 
   const activeStringIndex = tuner.index;
   const hasSignal = tuner.hasSignal;

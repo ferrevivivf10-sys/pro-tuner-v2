@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Modal,
 } from "react-native";
+import { useFocusEffect } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { PitchLabDisplay } from "@/src/components/PitchLabDisplay";
 import { usePitchDetectorFinal } from "@/src/hooks/usePitchDetectorFinal";
@@ -24,27 +25,40 @@ export default function TunerScreen() {
   const [isActive, setIsActive] = useState(false);
   const [tuningModalVisible, setTuningModalVisible] = useState(false);
 
+  const loadSettings = useCallback(async () => {
+    const loaded = await SettingsManager.loadSettings();
+    setSettings(loaded);
+    return loaded;
+  }, []);
+
+  // Carga inicial
   useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const loaded = await SettingsManager.loadSettings();
-        setSettings(loaded);
-        setIsLoading(false);
+    loadSettings()
+      .then(() => {
         setIsActive(true);
-      } catch (error) {
+      })
+      .catch((error) => {
         console.error("Erro ao carregar configuracoes:", error);
         Alert.alert("Erro", "Nao foi possivel carregar as configuracoes");
-        setIsLoading(false);
-      }
-    };
-    loadSettings();
-  }, []);
+      })
+      .finally(() => setIsLoading(false));
+  }, [loadSettings]);
+
+  // Recarrega ao voltar para a aba (as abas nao desmontam, entao mudancas
+  // feitas em Settings — A4, afinacao, sensibilidade — precisam ser relidas).
+  useFocusEffect(
+    useCallback(() => {
+      loadSettings().catch((error) =>
+        console.error("Erro ao recarregar configuracoes:", error)
+      );
+    }, [loadSettings])
+  );
 
   const pitchData = usePitchDetectorFinal(
     isActive,
     settings?.refA4 ?? 440,
     0.001,
-    settings?.sensitivity ?? 0.8
+    settings?.sensitivity ?? 0.7
   );
 
   const toggleTuner = useCallback(() => setIsActive((prev) => !prev), []);
@@ -85,6 +99,7 @@ export default function TunerScreen() {
           <PitchLabDisplay
             frequency={pitchData.frequency}
             confidence={pitchData.confidence}
+            sensitivity={settings?.sensitivity ?? 0.7}
             refA4={settings?.refA4 ?? 440}
             selectedTuning={settings?.selectedTuning ?? "Standard"}
             onTuningPress={() => setTuningModalVisible(true)}

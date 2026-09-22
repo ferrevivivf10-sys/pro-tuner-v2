@@ -149,7 +149,7 @@ Persistidas via `AsyncStorage` (chave `@pro_tuner_settings`):
 |-------|--------|-----------|
 | `refA4` | 440 | Referência A4 (432–444 Hz) |
 | `selectedTuning` | Standard | Afinação predefinida |
-| `sensitivity` | 0.8 | Sensibilidade |
+| `sensitivity` | 0.7 | Sensibilidade (define o limiar de clareza p/ aceitar uma nota) |
 | `noiseThreshold` | 0.005 | Limiar de ruído (gate RMS) |
 
 ---

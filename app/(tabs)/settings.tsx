@@ -18,10 +18,16 @@ import { SettingsManager } from "@/src/utils/SettingsManager";
 
 const CALIBRATIONS = [432, 438, 440, 442, 444];
 
+const SENSITIVITY_OPTIONS = [
+  { label: "Baixa", value: 0.4 },
+  { label: "Média", value: 0.7 },
+  { label: "Alta", value: 0.9 },
+];
+
 export default function SettingsScreen() {
   const [selectedCalib, setSelectedCalib] = useState(440);
   const [selectedTuning, setSelectedTuning] = useState<TuningName>("Standard");
-  const [sensitivity, setSensitivity] = useState(0.8);
+  const [sensitivity, setSensitivity] = useState(0.7);
   const [noiseThreshold, setNoiseThreshold] = useState(0.02);
 
   // Carregar configurações salvas
@@ -173,6 +179,42 @@ export default function SettingsScreen() {
                 </View>
               </TouchableOpacity>
             ))}
+          </View>
+        </View>
+
+        {/* Seção de Sensibilidade */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Sensibilidade</Text>
+          <Text style={styles.sectionDescription}>
+            Controla o quão nítido o som precisa ser para o afinador reagir. Mais
+            alta pega notas fracas, porém pode reagir a ruído; mais baixa só reage
+            a notas bem definidas.
+          </Text>
+
+          <View style={styles.optionsContainer}>
+            {SENSITIVITY_OPTIONS.map((opt) => {
+              const isActive = Math.abs(sensitivity - opt.value) < 0.01;
+              return (
+                <TouchableOpacity
+                  key={opt.label}
+                  style={[
+                    styles.optionButton,
+                    isActive && styles.optionButtonActive,
+                  ]}
+                  onPress={() => saveSensitivity(opt.value)}
+                >
+                  <Text
+                    style={[
+                      styles.optionText,
+                      isActive && styles.optionTextActive,
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                  {isActive && <Text style={styles.checkmark}>✓</Text>}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
