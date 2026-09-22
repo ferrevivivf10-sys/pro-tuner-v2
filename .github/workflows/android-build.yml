@@ -1,16 +1,18 @@
 name: Build Android APK
 
-# Compila um APK de debug (instalavel direto, sem assinatura de release) na
-# nuvem do GitHub — nao precisa de PC, conta Expo nem token.
-# - Roda automaticamente a cada push nesta branch de trabalho.
-# - Ou dispare manualmente: aba "Actions" > "Build Android APK" > "Run workflow".
+# Compila um APK de release na nuvem do GitHub — nao precisa de PC, conta
+# Expo nem token. O release embute o bundle JS, entao o app roda sozinho
+# (sem Metro), e e assinado com a debug key do Expo, entao instala direto.
+# - Roda automaticamente a cada push na main (ignorando mudancas so de .md).
+# - E tambem pode ser disparado manualmente em qualquer branch:
+#   aba "Actions" > "Build Android APK" > "Run workflow".
 # Ao terminar, baixe o APK em "Artifacts" na pagina da execucao.
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - claude/unused-files-obsolete-functions-qscu8c
+      - main
     paths-ignore:
       - "**/*.md"
 
