@@ -134,12 +134,16 @@ export function usePitchDetectorFinal(
                 ? combined.slice(combinedLen - MAX_BUFFER)
                 : combined;
 
-            // Processa todas as janelas sobrepostas que couberem no buffer
-            // acumulado. A deteccao roda sempre (nunca e pulada); so o
-            // setState (render) e limitado, pra UI nao sobrecarregar.
-            while (bufferRef.current.length >= BUFFER_SIZE) {
-              const chunk = bufferRef.current.slice(0, BUFFER_SIZE);
-              bufferRef.current = bufferRef.current.slice(HOP_SIZE);
+            // Processa APENAS a janela mais recente. Antes este trecho varria
+            // todas as janelas sobrepostas do buffer (~4 por callback), o que
+            // multiplicava por 4 o custo da NSDF e saturava a thread JS
+            // (travando toques e captacao). Para o que aparece na tela, so a
+            // janela mais recente importa.
+            const buf = bufferRef.current;
+            if (buf.length >= BUFFER_SIZE) {
+              const chunk = buf.subarray(buf.length - BUFFER_SIZE);
+              // Mantem um rabo do buffer para a proxima janela ter sobreposicao
+              bufferRef.current = buf.slice(buf.length - HOP_SIZE);
 
               let sumSq = 0;
               for (let i = 0; i < chunk.length; i++) {
@@ -161,14 +165,14 @@ export function usePitchDetectorFinal(
                     detectionMethod: "RMS " + rms.toFixed(5),
                   }));
                 }
-                continue;
+                return;
               }
 
               const { frequency: freq, clarity } = MPMProcessor.detectPitch(chunk, SAMPLE_RATE);
-              if (freq <= 0) continue;
+              if (freq <= 0) return;
 
               const info = getNoteInfo(freq, refA4);
-              if (!info) continue;
+              if (!info) return;
 
               const cents = calculateCentsToTarget(freq, info.targetFreq);
 

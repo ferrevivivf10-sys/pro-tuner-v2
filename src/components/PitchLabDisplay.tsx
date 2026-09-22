@@ -257,6 +257,41 @@ function RingTicks() {
   return <>{ticks}</>;
 }
 
+// Fundo do mostrador: anel + 60 marcacoes + indicador do topo.
+// E totalmente ESTATICO, entao fica memoizado: antes era reconstruido a cada
+// render (10-20x/s), recriando 60 elementos SVG a toa e pesando na UI.
+const RingBackdrop = memo(function RingBackdrop() {
+  return (
+    <View style={styles.ringLayer} pointerEvents="none">
+      <Svg width={RING_SIZE} height={RING_SIZE}>
+        <Defs>
+          <LinearGradient id="ringGrad" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor="#0A0A0A" stopOpacity="0.85" />
+            <Stop offset="1" stopColor="#000000" stopOpacity="0.85" />
+          </LinearGradient>
+        </Defs>
+        <Circle
+          cx={RING_CX}
+          cy={RING_CY}
+          r={RING_R}
+          fill="url(#ringGrad)"
+          stroke="#1F1F1F"
+          strokeWidth={2}
+        />
+        <RingTicks />
+        <Rect
+          x={RING_CX - 2.5}
+          y={RING_CY - RING_R - 2}
+          width={5}
+          height={20}
+          rx={2.5}
+          fill="#00E676"
+        />
+      </Svg>
+    </View>
+  );
+});
+
 // Linhas das cordas atravessando a tela toda
 const StringLinesFullWidth = memo(
   ({
@@ -475,34 +510,8 @@ function PitchLabDisplayComponent({
 
       {/* Area das cordas (ponta a ponta) + anel no fundo */}
       <View style={styles.stringArea}>
-        {/* Anel central no FUNDO */}
-        <View style={styles.ringLayer} pointerEvents="none">
-          <Svg width={RING_SIZE} height={RING_SIZE}>
-            <Defs>
-              <LinearGradient id="ringGrad" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor="#0A0A0A" stopOpacity="0.85" />
-                <Stop offset="1" stopColor="#000000" stopOpacity="0.85" />
-              </LinearGradient>
-            </Defs>
-            <Circle
-              cx={RING_CX}
-              cy={RING_CY}
-              r={RING_R}
-              fill="url(#ringGrad)"
-              stroke="#1F1F1F"
-              strokeWidth={2}
-            />
-            <RingTicks />
-            <Rect
-              x={RING_CX - 2.5}
-              y={RING_CY - RING_R - 2}
-              width={5}
-              height={20}
-              rx={2.5}
-              fill="#00E676"
-            />
-          </Svg>
-        </View>
+        {/* Anel central no FUNDO (estatico, memoizado) */}
+        <RingBackdrop />
 
         {/* Cordas atravessam a tela toda, POR CIMA do anel */}
         <View style={styles.stringsLayer} pointerEvents="none">
