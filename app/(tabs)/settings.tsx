@@ -15,6 +15,14 @@ import {
 import { ScreenContainer } from "@/components/screen-container";
 import { TUNINGS, type TuningName } from "@/src/utils/noteUtils";
 import { SettingsManager } from "@/src/utils/SettingsManager";
+import {
+  TunerDial,
+  RING_STYLES,
+  RING_STYLE_ORDER,
+  RING_IN_TUNE,
+  DEFAULT_RING_STYLE,
+  type RingStyleName,
+} from "@/src/components/TunerDial";
 
 const CALIBRATIONS = [432, 438, 440, 442, 444];
 
@@ -29,6 +37,7 @@ export default function SettingsScreen() {
   const [selectedTuning, setSelectedTuning] = useState<TuningName>("Standard");
   const [sensitivity, setSensitivity] = useState(0.7);
   const [noiseThreshold, setNoiseThreshold] = useState(0.02);
+  const [ringStyle, setRingStyle] = useState<RingStyleName>(DEFAULT_RING_STYLE);
 
   // Carregar configurações salvas
   useEffect(() => {
@@ -39,6 +48,7 @@ export default function SettingsScreen() {
         setSelectedTuning(settings.selectedTuning as TuningName);
         setSensitivity(settings.sensitivity);
         setNoiseThreshold(settings.noiseThreshold);
+        setRingStyle(settings.ringStyle);
       } catch (error) {
         console.error("Erro ao carregar configurações:", error);
       }
@@ -78,6 +88,16 @@ export default function SettingsScreen() {
       setSensitivity(value);
     } catch (error) {
       console.error("Erro ao salvar sensibilidade:", error);
+    }
+  };
+
+  // Salvar estilo do aro
+  const saveRingStyle = async (value: RingStyleName) => {
+    try {
+      await SettingsManager.setRingStyle(value);
+      setRingStyle(value);
+    } catch (error) {
+      console.error("Erro ao salvar estilo do aro:", error);
     }
   };
 
@@ -179,6 +199,43 @@ export default function SettingsScreen() {
                 </View>
               </TouchableOpacity>
             ))}
+          </View>
+        </View>
+
+        {/* Seção de Aparência */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Aparência</Text>
+          <Text style={styles.sectionDescription}>
+            Escolha o aro do mostrador. A cor indica a afinação e não muda com o
+            estilo.
+          </Text>
+
+          <View style={styles.ringGrid}>
+            {RING_STYLE_ORDER.map((key) => {
+              const isActive = ringStyle === key;
+              return (
+                <TouchableOpacity
+                  key={key}
+                  style={[styles.ringCard, isActive && styles.ringCardActive]}
+                  onPress={() => saveRingStyle(key)}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.ringThumb}>
+                    <TunerDial outerR={34} style={key} accent={RING_IN_TUNE} />
+                  </View>
+                  <Text
+                    style={[
+                      styles.ringLabel,
+                      isActive && styles.ringLabelActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {RING_STYLES[key].label}
+                  </Text>
+                  {isActive && <Text style={styles.ringCheck}>✓</Text>}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
@@ -354,6 +411,46 @@ const styles = StyleSheet.create({
   stringFreqValue: {
     fontSize: 12,
     fontWeight: "600",
+    color: "#00E676",
+  },
+  ringGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  ringCard: {
+    width: "31%",
+    alignItems: "center",
+    paddingVertical: 12,
+    backgroundColor: "#1A1A1A",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#333333",
+  },
+  ringCardActive: {
+    borderColor: "#00E676",
+    backgroundColor: "#0D1A0D",
+  },
+  ringThumb: {
+    width: 86,
+    height: 86,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ringLabel: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#CCCCCC",
+  },
+  ringLabelActive: {
+    color: "#00E676",
+  },
+  ringCheck: {
+    position: "absolute",
+    top: 6,
+    right: 8,
+    fontSize: 13,
     color: "#00E676",
   },
   infoSection: {
