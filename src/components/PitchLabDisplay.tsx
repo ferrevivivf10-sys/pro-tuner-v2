@@ -51,6 +51,18 @@ const CENTS_SMOOTH_SIZE = 5;     // media movel das ultimas N leituras de cents
 const LOCK_HIT_HEIGHT = 40;      // altura da area de toque de cada corda (modo manual)
 const STRING_GUARD_CENTS = 250;  // ~metade da distancia entre cordas; acima disso o sinal esta longe de qualquer corda
 const IN_TUNE_CENTS = 5;         // |cents| < isso => afinado
+
+// Cor do aro: e FUNCIONAL, nao decorativa. Sem sinal fica apagado (nao faz
+// sentido gritar "desafinado" com o app parado), vermelho enquanto desafinado
+// e verde quando afina.
+const RING_IDLE = "#3A3A3A";
+const RING_IN_TUNE = "#00E676";
+const RING_OUT = "#FF5252";
+
+function ringAccent(hasSignal: boolean, inTune: boolean): string {
+  if (!hasSignal) return RING_IDLE;
+  return inTune ? RING_IN_TUNE : RING_OUT;
+}
 // Limiar de clareza (0-1) do MPM para considerar que ha uma NOTA real, e nao
 // ruido ambiente. E derivado da "sensibilidade" (0-1) escolhida nas Config.:
 // sensibilidade ALTA => limiar BAIXO (pega notas fracas, mas trava mais em ruido)
@@ -227,7 +239,7 @@ function useStringTuner(
   return display;
 }
 
-function RingTicks() {
+function RingTicks({ accent }: { accent: string }) {
   const ticks = [];
   const total = 60;
   for (let i = 0; i < total; i++) {
@@ -237,7 +249,7 @@ function RingTicks() {
     const isQuarter = i % 5 === 0;
     const len = isCenter ? 18 : isQuarter ? 13 : 8;
     const strokeW = isCenter ? 3 : isQuarter ? 2 : 1;
-    const color = isCenter ? "#00E676" : isQuarter ? "#AAAAAA" : "#3A3A3A";
+    const color = isCenter ? accent : isQuarter ? "#AAAAAA" : "#3A3A3A";
     const x1 = RING_CX + RING_R * Math.cos(rad);
     const y1 = RING_CY + RING_R * Math.sin(rad);
     const x2 = RING_CX + (RING_R - len) * Math.cos(rad);
@@ -258,9 +270,9 @@ function RingTicks() {
 }
 
 // Fundo do mostrador: anel + 60 marcacoes + indicador do topo.
-// E totalmente ESTATICO, entao fica memoizado: antes era reconstruido a cada
-// render (10-20x/s), recriando 60 elementos SVG a toa e pesando na UI.
-const RingBackdrop = memo(function RingBackdrop() {
+// So a COR do indicador muda (pelo estado da afinacao), entao segue memoizado:
+// re-renderiza apenas quando o estado vira, nao a cada leitura de cents.
+const RingBackdrop = memo(function RingBackdrop({ accent }: { accent: string }) {
   return (
     <View style={styles.ringLayer} pointerEvents="none">
       <Svg width={RING_SIZE} height={RING_SIZE}>
@@ -278,14 +290,14 @@ const RingBackdrop = memo(function RingBackdrop() {
           stroke="#1F1F1F"
           strokeWidth={2}
         />
-        <RingTicks />
+        <RingTicks accent={accent} />
         <Rect
           x={RING_CX - 2.5}
           y={RING_CY - RING_R - 2}
           width={5}
           height={20}
           rx={2.5}
-          fill="#00E676"
+          fill={accent}
         />
       </Svg>
     </View>
@@ -511,7 +523,7 @@ function PitchLabDisplayComponent({
       {/* Area das cordas (ponta a ponta) + anel no fundo */}
       <View style={styles.stringArea}>
         {/* Anel central no FUNDO (estatico, memoizado) */}
-        <RingBackdrop />
+        <RingBackdrop accent={ringAccent(hasSignal, displayInTune)} />
 
         {/* Cordas atravessam a tela toda, POR CIMA do anel */}
         <View style={styles.stringsLayer} pointerEvents="none">
