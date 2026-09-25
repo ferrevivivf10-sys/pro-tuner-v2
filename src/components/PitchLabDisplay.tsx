@@ -16,8 +16,13 @@ import {
   StyleSheet,
   TouchableOpacity,
   Dimensions,
-  Image,
 } from "react-native";
+import {
+  TunerDial,
+  ringAccent,
+  DEFAULT_RING_STYLE,
+  type RingStyleName,
+} from "./TunerDial";
 import Svg, {
   Path,
   Text as SvgText,
@@ -50,43 +55,6 @@ const IN_TUNE_CENTS = 5;         // |cents| < isso => afinado
 // Cor do aro: e FUNCIONAL, nao decorativa. Sem sinal fica apagado (nao faz
 // sentido gritar "desafinado" com o app parado), vermelho enquanto desafinado
 // e verde quando afina.
-// Cada estado tem a cor e um tom mais claro, usado na faixa de brilho do arco.
-const RING_IDLE = { color: "#3A3A3A", highlight: "#5C5C5C" };
-const RING_IN_TUNE = { color: "#00E676", highlight: "#7BFFB4" };
-const RING_OUT = { color: "#FF5252", highlight: "#FF9E9E" };
-
-function ringAccent(hasSignal: boolean, inTune: boolean) {
-  if (!hasSignal) return RING_IDLE;
-  return inTune ? RING_IN_TUNE : RING_OUT;
-}
-
-// ===== Geometria da arte do aro =====
-// Medido nas imagens: a faixa metalica ocupa r=0.655..0.795 do meio-lado.
-// A imagem e escalada para a borda EXTERNA da faixa cair exatamente em RING_R,
-// mantendo o mostrador do mesmo tamanho de antes.
-const RING_BAND_IN = 0.655;
-const RING_BAND_OUT = 0.795;
-const RING_IMG_SIZE = (RING_R / RING_BAND_OUT) * 2;
-const RING_IMG_HALF = RING_IMG_SIZE / 2;
-const ARC_R = ((RING_BAND_IN + RING_BAND_OUT) / 2) * RING_IMG_HALF;
-const ARC_W = (RING_BAND_OUT - RING_BAND_IN) * RING_IMG_HALF * 0.70;
-const ARC_FROM = -125; // graus; -90 e o topo
-const ARC_TO = -55;
-
-// Parte 1: estilo fixo no Aco. O seletor entra na parte 2.
-const RING_IMAGE = require("../../assets/images/rings/aco.png");
-
-// Caminho de arco entre dois angulos
-function arcPath(cx: number, cy: number, r: number, a0: number, a1: number): string {
-  const pt = (deg: number) => {
-    const rad = (deg * Math.PI) / 180;
-    return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
-  };
-  const [x0, y0] = pt(a0);
-  const [x1, y1] = pt(a1);
-  const large = Math.abs(a1 - a0) > 180 ? 1 : 0;
-  return `M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1}`;
-}
 // Limiar de clareza (0-1) do MPM para considerar que ha uma NOTA real, e nao
 // ruido ambiente. E derivado da "sensibilidade" (0-1) escolhida nas Config.:
 // sensibilidade ALTA => limiar BAIXO (pega notas fracas, mas trava mais em ruido)
@@ -162,6 +130,7 @@ interface PitchLabDisplayProps {
   confidence: number;
   sensitivity: number;
   refA4: number;
+  ringStyle: RingStyleName;
   selectedTuning: string;
   onTuningPress?: () => void;
 }
@@ -262,63 +231,6 @@ function useStringTuner(
 
   return display;
 }
-
-// Mostrador: a arte do aro (imagem) + o arco de estado desenhado por cima.
-// O arco fica em SVG, e nao embutido na arte, para a cor vir do estado da
-// afinacao - assim uma unica imagem por estilo serve para todos os estados.
-// Memoizado: so re-renderiza quando o estado vira, nao a cada leitura de cents.
-const RingBackdrop = memo(function RingBackdrop({
-  accent,
-}: {
-  accent: { color: string; highlight: string };
-}) {
-  const d = arcPath(RING_IMG_HALF, RING_IMG_HALF, ARC_R, ARC_FROM, ARC_TO);
-  return (
-    <View style={styles.ringLayer} pointerEvents="none">
-      <View style={styles.ringStack}>
-        <Image source={RING_IMAGE} style={styles.ringImage} resizeMode="contain" />
-        <Svg
-          width={RING_IMG_SIZE}
-          height={RING_IMG_SIZE}
-          style={StyleSheet.absoluteFill}
-        >
-          <Defs>
-            <Filter id="arcGlow" x="-60%" y="-60%" width="220%" height="220%">
-              <FeGaussianBlur in="SourceGraphic" stdDeviation={ARC_W * 0.42} />
-            </Filter>
-          </Defs>
-          {/* halo */}
-          <Path
-            d={d}
-            stroke={accent.color}
-            strokeWidth={ARC_W * 1.5}
-            fill="none"
-            opacity={0.55}
-            strokeLinecap="round"
-            filter="url(#arcGlow)"
-          />
-          {/* nucleo */}
-          <Path
-            d={d}
-            stroke={accent.color}
-            strokeWidth={ARC_W}
-            fill="none"
-            strokeLinecap="round"
-          />
-          {/* faixa clara no meio: da o aspecto de vidro */}
-          <Path
-            d={d}
-            stroke={accent.highlight}
-            strokeWidth={ARC_W * 0.3}
-            fill="none"
-            opacity={0.9}
-            strokeLinecap="round"
-          />
-        </Svg>
-      </View>
-    </View>
-  );
-});
 
 // Linhas das cordas atravessando a tela toda
 const StringLinesFullWidth = memo(
@@ -439,6 +351,7 @@ function PitchLabDisplayComponent({
   confidence,
   sensitivity,
   refA4,
+  ringStyle,
   selectedTuning,
   onTuningPress,
 }: PitchLabDisplayProps) {
@@ -539,7 +452,13 @@ function PitchLabDisplayComponent({
       {/* Area das cordas (ponta a ponta) + anel no fundo */}
       <View style={styles.stringArea}>
         {/* Anel central no FUNDO (estatico, memoizado) */}
-        <RingBackdrop accent={ringAccent(hasSignal, displayInTune)} />
+        <View style={styles.ringLayer} pointerEvents="none">
+          <TunerDial
+            outerR={RING_R}
+            style={ringStyle ?? DEFAULT_RING_STYLE}
+            accent={ringAccent(hasSignal, displayInTune)}
+          />
+        </View>
 
         {/* Cordas atravessam a tela toda, POR CIMA do anel */}
         <View style={styles.stringsLayer} pointerEvents="none">
@@ -650,14 +569,6 @@ const styles = StyleSheet.create({
     left: 0,
     width: STRING_AREA_WIDTH,
     height: RING_SIZE,
-  },
-  ringStack: {
-    width: RING_IMG_SIZE,
-    height: RING_IMG_SIZE,
-  },
-  ringImage: {
-    width: RING_IMG_SIZE,
-    height: RING_IMG_SIZE,
   },
   ringLayer: {
     position: "absolute",

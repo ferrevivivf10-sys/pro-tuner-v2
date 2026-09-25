@@ -14,6 +14,7 @@ import {
 import { useFocusEffect } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { PitchLabDisplay } from "@/src/components/PitchLabDisplay";
+import { DEFAULT_RING_STYLE } from "@/src/components/TunerDial";
 import { usePitchDetectorFinal } from "@/src/hooks/usePitchDetectorFinal";
 import { SettingsManager, type TunerSettings } from "@/src/utils/SettingsManager";
 
@@ -101,6 +102,7 @@ export default function TunerScreen() {
             confidence={pitchData.confidence}
             sensitivity={settings?.sensitivity ?? 0.7}
             refA4={settings?.refA4 ?? 440}
+            ringStyle={settings?.ringStyle ?? DEFAULT_RING_STYLE}
             selectedTuning={settings?.selectedTuning ?? "Standard"}
             onTuningPress={() => setTuningModalVisible(true)}
           />
