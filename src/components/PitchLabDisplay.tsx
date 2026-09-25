@@ -16,16 +16,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   Dimensions,
+  Image,
 } from "react-native";
 import Svg, {
-  Circle,
-  Line,
-  Rect,
   Path,
   Text as SvgText,
   Defs,
-  LinearGradient,
-  Stop,
   Filter,
   FeGaussianBlur,
 } from "react-native-svg";
@@ -33,7 +29,6 @@ import Svg, {
 const SCREEN_WIDTH = Dimensions.get("window").width;
 
 const RING_SIZE = 380;
-const RING_CX = RING_SIZE / 2;
 const RING_CY = RING_SIZE / 2;
 const RING_R = 160;
 const RING_R_INNER = 130;
@@ -55,13 +50,42 @@ const IN_TUNE_CENTS = 5;         // |cents| < isso => afinado
 // Cor do aro: e FUNCIONAL, nao decorativa. Sem sinal fica apagado (nao faz
 // sentido gritar "desafinado" com o app parado), vermelho enquanto desafinado
 // e verde quando afina.
-const RING_IDLE = "#3A3A3A";
-const RING_IN_TUNE = "#00E676";
-const RING_OUT = "#FF5252";
+// Cada estado tem a cor e um tom mais claro, usado na faixa de brilho do arco.
+const RING_IDLE = { color: "#3A3A3A", highlight: "#5C5C5C" };
+const RING_IN_TUNE = { color: "#00E676", highlight: "#7BFFB4" };
+const RING_OUT = { color: "#FF5252", highlight: "#FF9E9E" };
 
-function ringAccent(hasSignal: boolean, inTune: boolean): string {
+function ringAccent(hasSignal: boolean, inTune: boolean) {
   if (!hasSignal) return RING_IDLE;
   return inTune ? RING_IN_TUNE : RING_OUT;
+}
+
+// ===== Geometria da arte do aro =====
+// Medido nas imagens: a faixa metalica ocupa r=0.655..0.795 do meio-lado.
+// A imagem e escalada para a borda EXTERNA da faixa cair exatamente em RING_R,
+// mantendo o mostrador do mesmo tamanho de antes.
+const RING_BAND_IN = 0.655;
+const RING_BAND_OUT = 0.795;
+const RING_IMG_SIZE = (RING_R / RING_BAND_OUT) * 2;
+const RING_IMG_HALF = RING_IMG_SIZE / 2;
+const ARC_R = ((RING_BAND_IN + RING_BAND_OUT) / 2) * RING_IMG_HALF;
+const ARC_W = (RING_BAND_OUT - RING_BAND_IN) * RING_IMG_HALF * 0.70;
+const ARC_FROM = -125; // graus; -90 e o topo
+const ARC_TO = -55;
+
+// Parte 1: estilo fixo no Aco. O seletor entra na parte 2.
+const RING_IMAGE = require("../../assets/images/rings/aco.png");
+
+// Caminho de arco entre dois angulos
+function arcPath(cx: number, cy: number, r: number, a0: number, a1: number): string {
+  const pt = (deg: number) => {
+    const rad = (deg * Math.PI) / 180;
+    return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+  };
+  const [x0, y0] = pt(a0);
+  const [x1, y1] = pt(a1);
+  const large = Math.abs(a1 - a0) > 180 ? 1 : 0;
+  return `M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1}`;
 }
 // Limiar de clareza (0-1) do MPM para considerar que ha uma NOTA real, e nao
 // ruido ambiente. E derivado da "sensibilidade" (0-1) escolhida nas Config.:
@@ -239,67 +263,59 @@ function useStringTuner(
   return display;
 }
 
-function RingTicks({ accent }: { accent: string }) {
-  const ticks = [];
-  const total = 60;
-  for (let i = 0; i < total; i++) {
-    const angleDeg = (i / total) * 360 - 90;
-    const rad = (angleDeg * Math.PI) / 180;
-    const isCenter = i === 0;
-    const isQuarter = i % 5 === 0;
-    const len = isCenter ? 18 : isQuarter ? 13 : 8;
-    const strokeW = isCenter ? 3 : isQuarter ? 2 : 1;
-    const color = isCenter ? accent : isQuarter ? "#AAAAAA" : "#3A3A3A";
-    const x1 = RING_CX + RING_R * Math.cos(rad);
-    const y1 = RING_CY + RING_R * Math.sin(rad);
-    const x2 = RING_CX + (RING_R - len) * Math.cos(rad);
-    const y2 = RING_CY + (RING_R - len) * Math.sin(rad);
-    ticks.push(
-      <Line
-        key={i}
-        x1={x1}
-        y1={y1}
-        x2={x2}
-        y2={y2}
-        stroke={color}
-        strokeWidth={strokeW}
-      />
-    );
-  }
-  return <>{ticks}</>;
-}
-
-// Fundo do mostrador: anel + 60 marcacoes + indicador do topo.
-// So a COR do indicador muda (pelo estado da afinacao), entao segue memoizado:
-// re-renderiza apenas quando o estado vira, nao a cada leitura de cents.
-const RingBackdrop = memo(function RingBackdrop({ accent }: { accent: string }) {
+// Mostrador: a arte do aro (imagem) + o arco de estado desenhado por cima.
+// O arco fica em SVG, e nao embutido na arte, para a cor vir do estado da
+// afinacao - assim uma unica imagem por estilo serve para todos os estados.
+// Memoizado: so re-renderiza quando o estado vira, nao a cada leitura de cents.
+const RingBackdrop = memo(function RingBackdrop({
+  accent,
+}: {
+  accent: { color: string; highlight: string };
+}) {
+  const d = arcPath(RING_IMG_HALF, RING_IMG_HALF, ARC_R, ARC_FROM, ARC_TO);
   return (
     <View style={styles.ringLayer} pointerEvents="none">
-      <Svg width={RING_SIZE} height={RING_SIZE}>
-        <Defs>
-          <LinearGradient id="ringGrad" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor="#0A0A0A" stopOpacity="0.85" />
-            <Stop offset="1" stopColor="#000000" stopOpacity="0.85" />
-          </LinearGradient>
-        </Defs>
-        <Circle
-          cx={RING_CX}
-          cy={RING_CY}
-          r={RING_R}
-          fill="url(#ringGrad)"
-          stroke="#1F1F1F"
-          strokeWidth={2}
-        />
-        <RingTicks accent={accent} />
-        <Rect
-          x={RING_CX - 2.5}
-          y={RING_CY - RING_R - 2}
-          width={5}
-          height={20}
-          rx={2.5}
-          fill={accent}
-        />
-      </Svg>
+      <View style={styles.ringStack}>
+        <Image source={RING_IMAGE} style={styles.ringImage} resizeMode="contain" />
+        <Svg
+          width={RING_IMG_SIZE}
+          height={RING_IMG_SIZE}
+          style={StyleSheet.absoluteFill}
+        >
+          <Defs>
+            <Filter id="arcGlow" x="-60%" y="-60%" width="220%" height="220%">
+              <FeGaussianBlur in="SourceGraphic" stdDeviation={ARC_W * 0.42} />
+            </Filter>
+          </Defs>
+          {/* halo */}
+          <Path
+            d={d}
+            stroke={accent.color}
+            strokeWidth={ARC_W * 1.5}
+            fill="none"
+            opacity={0.55}
+            strokeLinecap="round"
+            filter="url(#arcGlow)"
+          />
+          {/* nucleo */}
+          <Path
+            d={d}
+            stroke={accent.color}
+            strokeWidth={ARC_W}
+            fill="none"
+            strokeLinecap="round"
+          />
+          {/* faixa clara no meio: da o aspecto de vidro */}
+          <Path
+            d={d}
+            stroke={accent.highlight}
+            strokeWidth={ARC_W * 0.3}
+            fill="none"
+            opacity={0.9}
+            strokeLinecap="round"
+          />
+        </Svg>
+      </View>
     </View>
   );
 });
@@ -634,6 +650,14 @@ const styles = StyleSheet.create({
     left: 0,
     width: STRING_AREA_WIDTH,
     height: RING_SIZE,
+  },
+  ringStack: {
+    width: RING_IMG_SIZE,
+    height: RING_IMG_SIZE,
+  },
+  ringImage: {
+    width: RING_IMG_SIZE,
+    height: RING_IMG_SIZE,
   },
   ringLayer: {
     position: "absolute",
