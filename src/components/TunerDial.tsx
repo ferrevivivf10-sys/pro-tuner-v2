@@ -30,16 +30,31 @@ interface RingStyleDef {
   label: string;
   /** null = desenhado em SVG */
   image: number | null;
+  /**
+   * Onde o arco de estado assenta, em fracao do meio-lado da imagem.
+   * E por estilo porque as artes tem estruturas diferentes: nas de faixa
+   * cheia o metal vai de 0.655 a 0.79, enquanto as "escala" sao aro duplo
+   * (aro 0.655-0.70, canal de marcacoes 0.70-0.75, aro 0.75-0.79).
+   * Usar um numero unico fazia o arco transbordar o canal e cobrir os dois
+   * aros das "escala".
+   */
+  arcR: number;
+  arcW: number;
 }
 
+// Faixa cheia: o arco cobre o metal
+const BAND_ARC = { arcR: 0.725, arcW: 0.098 };
+// Aro duplo: o arco corre DENTRO do canal, sem encostar nos aros
+const CHANNEL_ARC = { arcR: 0.725, arcW: 0.044 };
+
 export const RING_STYLES: Record<RingStyleName, RingStyleDef> = {
-  minimalista: { label: "Minimalista", image: null },
-  aco: { label: "Aço", image: require("../../assets/images/rings/aco.png") },
-  ouro: { label: "Ouro", image: require("../../assets/images/rings/ouro.png") },
-  grafite: { label: "Grafite", image: require("../../assets/images/rings/grafite.png") },
-  "aco-escala": { label: "Aço escala", image: require("../../assets/images/rings/aco-escala.png") },
-  "ouro-escala": { label: "Ouro escala", image: require("../../assets/images/rings/ouro-escala.png") },
-  "grafite-escala": { label: "Grafite escala", image: require("../../assets/images/rings/grafite-escala.png") },
+  minimalista: { label: "Minimalista", image: null, ...BAND_ARC },
+  aco: { label: "Aço", image: require("../../assets/images/rings/aco.png"), ...BAND_ARC },
+  ouro: { label: "Ouro", image: require("../../assets/images/rings/ouro.png"), ...BAND_ARC },
+  grafite: { label: "Grafite", image: require("../../assets/images/rings/grafite.png"), ...BAND_ARC },
+  "aco-escala": { label: "Aço escala", image: require("../../assets/images/rings/aco-escala.png"), ...CHANNEL_ARC },
+  "ouro-escala": { label: "Ouro escala", image: require("../../assets/images/rings/ouro-escala.png"), ...CHANNEL_ARC },
+  "grafite-escala": { label: "Grafite escala", image: require("../../assets/images/rings/grafite-escala.png"), ...CHANNEL_ARC },
 };
 
 export const RING_STYLE_ORDER: RingStyleName[] = [
@@ -59,7 +74,9 @@ export function isRingStyle(value: string): value is RingStyleName {
 }
 
 // ===== Cor por estado =====
-export const RING_IDLE = { color: "#3A3A3A", highlight: "#5C5C5C" };
+// Sem sinal fica PRATEADO, nao cinza escuro: qualquer tom mais escuro que o
+// metal e lido como mancha/sombra no aro, em vez de indicador apagado.
+export const RING_IDLE = { color: "#B9C0C6", highlight: "#E1E6EA" };
 export const RING_IN_TUNE = { color: "#00E676", highlight: "#7BFFB4" };
 export const RING_OUT = { color: "#FF5252", highlight: "#FF9E9E" };
 export type RingAccent = typeof RING_IDLE;
@@ -72,7 +89,8 @@ export function ringAccent(hasSignal: boolean, inTune: boolean): RingAccent {
 // ===== Geometria =====
 // Medido na arte: a faixa metalica ocupa r=0.655..0.795 do meio-lado da imagem.
 // A caixa e dimensionada para a borda EXTERNA da faixa cair no raio pedido.
-const BAND_IN = 0.655;
+// Borda externa do metal na arte: usada para dimensionar a caixa de modo que
+// o aro caia exatamente no raio pedido.
 const BAND_OUT = 0.795;
 const ARC_FROM = -125; // graus; -90 e o topo
 const ARC_TO = -55;
@@ -149,8 +167,8 @@ function TunerDialComponent({ outerR, style, accent }: TunerDialProps) {
   }
 
   // --- Aros com arte: imagem + arco de estado por cima ---
-  const arcR = ((BAND_IN + BAND_OUT) / 2) * c;
-  const arcW = (BAND_OUT - BAND_IN) * c * 0.7;
+  const arcR = def.arcR * c;
+  const arcW = def.arcW * c;
   const d = arcPath(c, c, arcR, ARC_FROM, ARC_TO);
   return (
     <View style={{ width: box, height: box }} pointerEvents="none">
