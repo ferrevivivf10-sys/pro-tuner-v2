@@ -12,6 +12,7 @@ import {
   StyleSheet,
   Alert,
 } from "react-native";
+import Constants from "expo-constants";
 import { ScreenContainer } from "@/components/screen-container";
 import { TUNINGS, type TuningName } from "@/src/utils/noteUtils";
 import { SettingsManager } from "@/src/utils/SettingsManager";
@@ -287,7 +288,9 @@ export default function SettingsScreen() {
 
         {/* Versão */}
         <View style={styles.footer}>
-          <Text style={styles.versionText}>Pro Tuner v1.0.0</Text>
+          <Text style={styles.versionText}>
+            Pro Tuner v{Constants.expoConfig?.version ?? "?"} · {Constants.expoConfig?.extra?.commit ?? "dev"}
+          </Text>
         </View>
       </ScrollView>
     </ScreenContainer>

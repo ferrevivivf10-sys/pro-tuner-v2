@@ -1,4 +1,7 @@
 import type { ExpoConfig } from "expo/config";
+// Versao automatica: +1 a cada commit (ver scripts/version.js)
+const { getVersion } = require("./scripts/version");
+const appVersion = getVersion();
 const bundleId = "com.app.protunermobile";
 const env = {
   appName: "Pro Tuner",
@@ -10,7 +13,7 @@ const env = {
 const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
-  version: "1.0.0",
+  version: appVersion.name,
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: env.scheme,
@@ -33,6 +36,7 @@ const config: ExpoConfig = {
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
     package: env.androidPackage,
+    versionCode: appVersion.code,
     permissions: ["RECORD_AUDIO"],
     intentFilters: [
       {
@@ -90,6 +94,7 @@ const config: ExpoConfig = {
     reactCompiler: true,
   },
   extra: {
+    commit: appVersion.commit,
     eas: {
       projectId: "f762a2b1-15a7-4b83-80db-95c49d8dd110",
     },
