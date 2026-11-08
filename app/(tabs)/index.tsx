@@ -12,12 +12,14 @@ import {
   Modal,
 } from "react-native";
 import { useFocusEffect } from "expo-router";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { ScreenContainer } from "@/components/screen-container";
 import { PitchLabDisplay } from "@/src/components/PitchLabDisplay";
 import { DEFAULT_RING_STYLE } from "@/src/components/TunerDial";
 import { usePitchDetectorFinal } from "@/src/hooks/usePitchDetectorFinal";
 import { SettingsManager, type TunerSettings } from "@/src/utils/SettingsManager";
 
+const KEEP_AWAKE_TAG = "pro-tuner";
 const TUNING_OPTIONS = ["Standard", "DropD", "HalfStepDown", "FullStepDown", "OpenG"] as const;
 
 export default function TunerScreen() {
@@ -60,6 +62,17 @@ export default function TunerScreen() {
     settings?.refA4 ?? 440,
     0.001,
     settings?.sensitivity ?? 0.7
+  );
+
+  // Tela sempre ligada enquanto o afinador esta ativo e nesta aba
+  useFocusEffect(
+    useCallback(() => {
+      if (!isActive) return;
+      activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {});
+      return () => {
+        deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {});
+      };
+    }, [isActive])
   );
 
   const toggleTuner = useCallback(() => setIsActive((prev) => !prev), []);
