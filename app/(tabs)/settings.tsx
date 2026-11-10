@@ -260,9 +260,9 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Sensibilidade</Text>
           <Text style={styles.sectionDescription}>
-            Controla o quão nítido o som precisa ser para o afinador reagir. Mais
-            alta pega notas fracas, porém pode reagir a ruído; mais baixa só reage
-            a notas bem definidas.
+            Vale para o microfone do celular. Alta pega notas fracas em lugar
+            silencioso; Baixa só aceita notas bem limpas, ideal com muito ruído.
+            Com cabo o ajuste é automático.
           </Text>
 
           <View style={styles.optionsContainer}>

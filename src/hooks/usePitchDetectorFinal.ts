@@ -33,12 +33,19 @@ const UI_UPDATE_MIN_INTERVAL_MS = 50; // limita re-render, nunca a deteccao em s
 
 // Estabilidade (modo microfone): descarta leituras isoladas de ruido,
 // ataque da corda e pulos de oitava. Valores medidos nos testes com ruido.
-const MIC_MIN_CLARITY = 0.75;   // ruido/voz ficam abaixo disso
 const SAME_NOTE_CENTS = 50;     // leituras dentro disso contam como a mesma nota
 const CONFIRM_FRAMES = 2;       // leituras seguidas para trocar de nota
 const OCTAVE_CONFIRM_FRAMES = 3; // pulo de oitava exige mais confirmacao
 const HOLD_MS = 200;            // segura a nota exibida apos o som sumir
 const MIC_MAX_FREQ = 1000;      // acima disso e ruido do ambiente (ex.: tom de ~1070 Hz)
+
+// Clareza minima no mic conforme a sensibilidade escolhida.
+// Ruido/voz medidos ficam abaixo de ~0.75.
+function micMinClarity(sensitivity: number): number {
+  if (sensitivity >= 0.85) return 0.65; // Alta: pega notas fracas (ambiente silencioso)
+  if (sensitivity >= 0.55) return 0.75; // Media: equilibrio
+  return 0.85;                          // Baixa: so notas bem limpas (muito ruido)
+}
 
 function centsBetween(a: number, b: number): number {
   return 1200 * Math.log2(a / b);
@@ -213,7 +220,8 @@ export function usePitchDetectorFinal(
               }
 
               let { frequency: freq, clarity } = MPMProcessor.detectPitch(chunk, SAMPLE_RATE);
-              const lowClarity = stabilize && (clarity < MIC_MIN_CLARITY || freq > MIC_MAX_FREQ);
+              const lowClarity =
+                stabilize && (clarity < micMinClarity(sensitivity) || freq > MIC_MAX_FREQ);
               if (freq <= 0 || lowClarity) {
                 if (stabilize && now - lastAcceptRef.current >= HOLD_MS) {
                   clearNote(diag("SEM NOTA · ", clarity));
@@ -314,7 +322,7 @@ export function usePitchDetectorFinal(
       stopRecording().catch(() => {});
       bufferRef.current = new Float32Array(0);
     };
-  }, [isActive, refA4, noiseThreshold, stabilize]);
+  }, [isActive, refA4, noiseThreshold, stabilize, sensitivity]);
 
   useEffect(() => {
     if (Platform.OS !== "web") return;
