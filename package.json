@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "cross-env EXPO_USE_METRO_WORKSPACE_ROOT=1 npx expo start --web --port ${EXPO_PORT:-8081}",
     "check": "tsc --noEmit",
+    "test": "node --experimental-strip-types --no-warnings --test \"tests/*.test.mjs\"",
     "lint": "expo lint",
     "format": "prettier --write .",
     "android": "expo run:android",

@@ -55,6 +55,10 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      # Para o build se o detector de notas quebrar
+      - name: Testes
+        run: npm test
+
       - name: Prebuild (gera o projeto android/)
         run: npx expo prebuild --platform android --no-install
 
