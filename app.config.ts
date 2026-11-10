@@ -38,6 +38,13 @@ const config: ExpoConfig = {
     package: env.androidPackage,
     versionCode: appVersion.code,
     permissions: ["RECORD_AUDIO"],
+    // Permissoes que a lib de audio adiciona e o app nao usa
+    blockedPermissions: [
+      "android.permission.BLUETOOTH",
+      "android.permission.BLUETOOTH_ADMIN",
+      "android.permission.BLUETOOTH_CONNECT",
+      "android.permission.USB_PERMISSION",
+    ],
     intentFilters: [
       {
         action: "VIEW",
@@ -60,7 +67,15 @@ const config: ExpoConfig = {
   plugins: [
     "expo-router",
     "expo-asset",
-    "@siteed/audio-studio",
+    [
+      "@siteed/audio-studio",
+      {
+        // Sem gravacao em segundo plano, notificacao ou leitura de chamadas
+        enableBackgroundAudio: false,
+        enableNotifications: false,
+        enablePhoneStateHandling: false,
+      },
+    ],
     [
       "expo-audio",
       {
