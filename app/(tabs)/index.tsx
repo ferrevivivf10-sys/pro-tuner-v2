@@ -27,7 +27,7 @@ const TUNING_OPTIONS = ["Standard", "DropD", "HalfStepDown", "FullStepDown", "Op
 // limites fixos medidos no violao (chiado ~0.0013 RMS / clareza <= 0.36;
 // nota real >= 0.014 RMS / clareza >= 0.82).
 const CABLE_TYPES = ["usb", "wired_headset"];
-const MIC_NOISE_THRESHOLD = 0.001;
+const MIC_NOISE_THRESHOLD = 0.0025; // silencio do mic ~0.0003; nota fraca >= 0.004
 const CABLE_NOISE_THRESHOLD = 0.003;
 const CABLE_SENSITIVITY = 0.5; // equivale a clareza minima de 0.6
 
@@ -74,7 +74,8 @@ export default function TunerScreen() {
     isActive,
     settings?.refA4 ?? 440,
     isCable ? CABLE_NOISE_THRESHOLD : MIC_NOISE_THRESHOLD,
-    sensitivity
+    sensitivity,
+    !isCable // estabilidade so no microfone
   );
 
   // Tela sempre ligada enquanto o afinador esta ativo e nesta aba

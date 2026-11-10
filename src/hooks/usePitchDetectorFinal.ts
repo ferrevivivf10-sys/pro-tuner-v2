@@ -31,6 +31,22 @@ const HOP_SIZE = 1024; // 50% de sobreposicao: detecta 2x mais vezes que o buffe
 const MAX_BUFFER = BUFFER_SIZE * 2;
 const UI_UPDATE_MIN_INTERVAL_MS = 50; // limita re-render, nunca a deteccao em si
 
+// Estabilidade (modo microfone): descarta leituras isoladas de ruido,
+// ataque da corda e pulos de oitava. Valores medidos nos testes com ruido.
+const MIC_MIN_CLARITY = 0.75;   // ruido/voz ficam abaixo disso
+const SAME_NOTE_CENTS = 50;     // leituras dentro disso contam como a mesma nota
+const CONFIRM_FRAMES = 2;       // leituras seguidas para trocar de nota
+const OCTAVE_CONFIRM_FRAMES = 3; // pulo de oitava exige mais confirmacao
+const HOLD_MS = 200;            // segura a nota exibida apos o som sumir
+
+function centsBetween(a: number, b: number): number {
+  return 1200 * Math.log2(a / b);
+}
+
+function isOctaveJump(a: number, b: number): boolean {
+  return Math.abs(Math.abs(centsBetween(a, b)) - 1200) < SAME_NOTE_CENTS;
+}
+
 function calculateCentsToTarget(detectedFreq: number, targetFreq: number): number {
   if (detectedFreq <= 0 || targetFreq <= 0) return 0;
   return 1200 * Math.log2(detectedFreq / targetFreq);
@@ -72,7 +88,8 @@ export function usePitchDetectorFinal(
   isActive: boolean,
   refA4: number = 440,
   noiseThreshold: number = 0.001,
-  sensitivity: number = 0.8
+  sensitivity: number = 0.8,
+  stabilize: boolean = false
 ): PitchData {
   const [pitchData, setPitchData] = useState<PitchData>(INITIAL_PITCH_DATA);
 
@@ -80,6 +97,10 @@ export function usePitchDetectorFinal(
   const bufferRef = useRef<Float32Array>(new Float32Array(0));
   const lastUpdateRef = useRef(0);
   const lastChunkLenRef = useRef(0); // DIAGNOSTICO: amostras por callback
+  const stableFreqRef = useRef(0);   // ultima nota aceita (Hz)
+  const candFreqRef = useRef(0);     // candidata a nova nota (Hz)
+  const candCountRef = useRef(0);    // leituras seguidas da candidata
+  const lastAcceptRef = useRef(0);   // quando a ultima leitura foi aceita
 
   const { startRecording, stopRecording } = useAudioRecorder();
 
@@ -156,7 +177,26 @@ export function usePitchDetectorFinal(
               const now = Date.now();
               const canRender = now - lastUpdateRef.current >= UI_UPDATE_MIN_INTERVAL_MS;
 
+              const diag = (prefix: string, clar?: number) =>
+                prefix + "RMS " + rms.toFixed(4) +
+                (clar !== undefined ? " · clar " + clar.toFixed(2) : "") +
+                " · n=" + lastChunkLenRef.current;
+
+              // Limpa a nota exibida (silencio ou ruido por mais de HOLD_MS)
+              const clearNote = (text: string) => {
+                stableFreqRef.current = 0;
+                candCountRef.current = 0;
+                if (canRender) {
+                  lastUpdateRef.current = now;
+                  setPitchData((p) => ({ ...p, note: "-", frequency: 0, confidence: 0, detectionMethod: text }));
+                }
+              };
+
               if (rms < noiseThreshold) {
+                if (stabilize) {
+                  if (now - lastAcceptRef.current >= HOLD_MS) clearNote(diag(""));
+                  return;
+                }
                 if (canRender) {
                   lastUpdateRef.current = now;
                   setPitchData((p) => ({
@@ -171,7 +211,12 @@ export function usePitchDetectorFinal(
               }
 
               const { frequency: freq, clarity } = MPMProcessor.detectPitch(chunk, SAMPLE_RATE);
-              if (freq <= 0) {
+              const lowClarity = stabilize && clarity < MIC_MIN_CLARITY;
+              if (freq <= 0 || lowClarity) {
+                if (stabilize && now - lastAcceptRef.current >= HOLD_MS) {
+                  clearNote(diag("SEM NOTA · ", clarity));
+                  return;
+                }
                 // DIAGNOSTICO: mostra o que chega mesmo sem nota detectada
                 if (canRender) {
                   lastUpdateRef.current = now;
@@ -184,6 +229,37 @@ export function usePitchDetectorFinal(
                   }));
                 }
                 return;
+              }
+
+              if (stabilize) {
+                const stable = stableFreqRef.current;
+                if (stable > 0 && Math.abs(centsBetween(freq, stable)) < SAME_NOTE_CENTS) {
+                  // mesma nota: aceita direto
+                  stableFreqRef.current = freq;
+                  candCountRef.current = 0;
+                } else {
+                  // nota nova: precisa se repetir antes de aparecer
+                  const sameCand =
+                    candCountRef.current > 0 &&
+                    Math.abs(centsBetween(freq, candFreqRef.current)) < SAME_NOTE_CENTS;
+                  candFreqRef.current = freq;
+                  candCountRef.current = sameCand ? candCountRef.current + 1 : 1;
+                  const need =
+                    stable > 0 && isOctaveJump(freq, stable) ? OCTAVE_CONFIRM_FRAMES : CONFIRM_FRAMES;
+                  if (candCountRef.current < need) {
+                    if (canRender) {
+                      lastUpdateRef.current = now;
+                      setPitchData((p) => ({
+                        ...p,
+                        detectionMethod: diag("SEGURANDO " + candCountRef.current + "/" + need + " · ", clarity),
+                      }));
+                    }
+                    return;
+                  }
+                  stableFreqRef.current = freq;
+                  candCountRef.current = 0;
+                }
+                lastAcceptRef.current = now;
               }
 
               const info = getNoteInfo(freq, refA4);
@@ -231,7 +307,7 @@ export function usePitchDetectorFinal(
       stopRecording().catch(() => {});
       bufferRef.current = new Float32Array(0);
     };
-  }, [isActive, refA4, noiseThreshold]);
+  }, [isActive, refA4, noiseThreshold, stabilize]);
 
   useEffect(() => {
     if (Platform.OS !== "web") return;
