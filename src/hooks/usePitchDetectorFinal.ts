@@ -38,6 +38,7 @@ const CONFIRM_FRAMES = 2;       // leituras seguidas para trocar de nota
 const OCTAVE_CONFIRM_FRAMES = 3; // pulo de oitava exige mais confirmacao
 const HOLD_MS = 200;            // segura a nota exibida apos o som sumir
 const HOLD_SOUND_MS = 600;      // segura mais se ainda ha som (leitura suja por ruido)
+const SMOOTH_FRAMES = 3;        // mediana das ultimas leituras para o ponteiro tremer menos
 const MIC_MAX_FREQ = 700;       // acima disso e ruido do ambiente (Mi agudo na 12a casa = 659 Hz)
 
 // Clareza minima no mic conforme a sensibilidade escolhida.
@@ -50,6 +51,11 @@ function micMinClarity(sensitivity: number): number {
 
 function centsBetween(a: number, b: number): number {
   return 1200 * Math.log2(a / b);
+}
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
 }
 
 function isOctaveJump(a: number, b: number): boolean {
@@ -110,6 +116,7 @@ export function usePitchDetectorFinal(
   const candFreqRef = useRef(0);     // candidata a nova nota (Hz)
   const candCountRef = useRef(0);    // leituras seguidas da candidata
   const lastAcceptRef = useRef(0);   // quando a ultima leitura foi aceita
+  const recentFreqsRef = useRef<number[]>([]); // ultimas leituras aceitas da nota atual
 
   const { startRecording, stopRecording } = useAudioRecorder();
 
@@ -200,6 +207,7 @@ export function usePitchDetectorFinal(
               const clearNote = (text: string) => {
                 stableFreqRef.current = 0;
                 candCountRef.current = 0;
+                recentFreqsRef.current = [];
                 if (canRender) {
                   lastUpdateRef.current = now;
                   setPitchData((p) => ({ ...p, note: "-", frequency: 0, confidence: 0, detectionMethod: text }));
@@ -278,8 +286,15 @@ export function usePitchDetectorFinal(
                   }
                   stableFreqRef.current = freq;
                   candCountRef.current = 0;
+                  recentFreqsRef.current = []; // nota nova: recomeca a suavizacao
                 }
                 lastAcceptRef.current = now;
+
+                // Ponteiro: mediana das ultimas leituras da mesma nota
+                const recent = recentFreqsRef.current;
+                recent.push(freq);
+                if (recent.length > SMOOTH_FRAMES) recent.shift();
+                freq = median(recent);
               }
 
               const info = getNoteInfo(freq, refA4);
