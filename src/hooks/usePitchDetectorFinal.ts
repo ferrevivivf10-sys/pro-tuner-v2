@@ -79,6 +79,7 @@ export function usePitchDetectorFinal(
   const isActiveRef = useRef(isActive);
   const bufferRef = useRef<Float32Array>(new Float32Array(0));
   const lastUpdateRef = useRef(0);
+  const lastChunkLenRef = useRef(0); // DIAGNOSTICO: amostras por callback
 
   const { startRecording, stopRecording } = useAudioRecorder();
 
@@ -121,6 +122,7 @@ export function usePitchDetectorFinal(
             if (!event?.data) return;
 
             const samples = base64ToFloat32(event.data);
+            lastChunkLenRef.current = samples.length;
 
             // Concatena mantendo so as ultimas MAX_BUFFER amostras
             const prev = bufferRef.current;
@@ -162,14 +164,27 @@ export function usePitchDetectorFinal(
                     note: "-",
                     frequency: 0,
                     confidence: 0,
-                    detectionMethod: "RMS " + rms.toFixed(5),
+                    detectionMethod: "RMS " + rms.toFixed(5) + " · n=" + lastChunkLenRef.current,
                   }));
                 }
                 return;
               }
 
               const { frequency: freq, clarity } = MPMProcessor.detectPitch(chunk, SAMPLE_RATE);
-              if (freq <= 0) return;
+              if (freq <= 0) {
+                // DIAGNOSTICO: mostra o que chega mesmo sem nota detectada
+                if (canRender) {
+                  lastUpdateRef.current = now;
+                  setPitchData((p) => ({
+                    ...p,
+                    detectionMethod:
+                      "SEM NOTA · RMS " + rms.toFixed(4) +
+                      " · clar " + clarity.toFixed(2) +
+                      " · n=" + lastChunkLenRef.current,
+                  }));
+                }
+                return;
+              }
 
               const info = getNoteInfo(freq, refA4);
               if (!info) return;
@@ -185,7 +200,10 @@ export function usePitchDetectorFinal(
                   cents,
                   inTune: Math.abs(cents) < 10,
                   confidence: clarity,
-                  detectionMethod: "audio-studio + MPM",
+                  detectionMethod:
+                    "RMS " + rms.toFixed(4) +
+                    " · clar " + clarity.toFixed(2) +
+                    " · n=" + lastChunkLenRef.current,
                 });
               }
             }
