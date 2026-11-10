@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import Constants from "expo-constants";
 import { ScreenContainer } from "@/components/screen-container";
-import { TUNINGS, type TuningName } from "@/src/utils/noteUtils";
+import { TUNINGS, TUNING_LABELS, type TuningName } from "@/src/utils/noteUtils";
 import { SettingsManager } from "@/src/utils/SettingsManager";
 import {
   TunerDial,
@@ -75,7 +75,7 @@ export default function SettingsScreen() {
     try {
       await SettingsManager.setTuning(tuning);
       setSelectedTuning(tuning);
-      Alert.alert("✓ Afinação Salva", `Modo: ${tuning}`);
+      Alert.alert("✓ Afinação Salva", `Modo: ${TUNING_LABELS[tuning]}`);
     } catch (error) {
       console.error("Erro ao salvar afinação:", error);
       Alert.alert("Erro", "Não foi possível salvar a afinação");
@@ -178,7 +178,7 @@ export default function SettingsScreen() {
                         styles.tuningNameActive,
                     ]}
                   >
-                    {tuningName}
+                    {TUNING_LABELS[tuningName]}
                   </Text>
                   {selectedTuning === tuningName && (
                     <Text style={styles.tuningCheckmark}>✓</Text>

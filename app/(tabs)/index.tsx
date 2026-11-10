@@ -20,6 +20,7 @@ import { PitchLabDisplay } from "@/src/components/PitchLabDisplay";
 import { DEFAULT_RING_STYLE } from "@/src/components/TunerDial";
 import { usePitchDetectorFinal } from "@/src/hooks/usePitchDetectorFinal";
 import { SettingsManager, type TunerSettings } from "@/src/utils/SettingsManager";
+import { TUNING_LABELS, type TuningName } from "@/src/utils/noteUtils";
 
 const KEEP_AWAKE_TAG = "pro-tuner";
 const TUNING_OPTIONS = ["Standard", "DropD", "HalfStepDown", "FullStepDown", "OpenG"] as const;
@@ -176,7 +177,7 @@ export default function TunerScreen() {
           onPress={() => setTuningModalVisible(false)}
         >
           <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Selecionar Afinacao</Text>
+            <Text style={styles.modalTitle}>Selecionar Afinação</Text>
             {TUNING_OPTIONS.map((t) => (
               <TouchableOpacity
                 key={t}
@@ -192,7 +193,7 @@ export default function TunerScreen() {
                     (settings?.selectedTuning ?? "Standard") === t && styles.modalItemTextActive,
                   ]}
                 >
-                  {t}
+                  {TUNING_LABELS[t as TuningName]}
                 </Text>
               </TouchableOpacity>
             ))}

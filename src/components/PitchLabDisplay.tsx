@@ -23,6 +23,7 @@ import {
   DEFAULT_RING_STYLE,
   type RingStyleName,
 } from "./TunerDial";
+import { TUNING_LABELS, type TuningName } from "../utils/noteUtils";
 import Svg, {
   Path,
   Text as SvgText,
@@ -517,7 +518,9 @@ function PitchLabDisplayComponent({
         onPress={onTuningPress}
         activeOpacity={0.7}
       >
-        <Text style={styles.tuningText}>{selectedTuning}</Text>
+        <Text style={styles.tuningText}>
+          {TUNING_LABELS[selectedTuning as TuningName] ?? selectedTuning}
+        </Text>
         <Text style={styles.tuningArrow}>{"▼"}</Text>
       </TouchableOpacity>
     </View>

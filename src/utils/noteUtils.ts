@@ -61,6 +61,15 @@ export const TUNINGS = {
 
 export type TuningName = keyof typeof TUNINGS;
 
+// Nomes exibidos ao usuario
+export const TUNING_LABELS: Record<TuningName, string> = {
+  Standard: "Padrão",
+  DropD: "Drop D",
+  HalfStepDown: "Meio tom abaixo",
+  FullStepDown: "Um tom abaixo",
+  OpenG: "Open G",
+};
+
 /**
  * Encontra a nota mais próxima em uma afinação
  */
