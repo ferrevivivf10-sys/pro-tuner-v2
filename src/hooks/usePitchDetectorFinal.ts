@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { Platform } from "react-native";
+import { Platform, PermissionsAndroid } from "react-native";
 import { decode } from "base-64";
-import { useAudioRecorder, ExpoAudioStreamModule } from "@siteed/audio-studio";
+import { useAudioRecorder } from "@siteed/audio-studio";
 import { MPMProcessor } from "../audio/MPMProcessor";
 import { NOTES } from "../utils/noteUtils";
 
@@ -124,8 +124,12 @@ export function usePitchDetectorFinal(
 
     const start = async () => {
       try {
-        const { granted } =
-          await ExpoAudioStreamModule.requestPermissionsAsync();
+        // Pede so o microfone (a lib pediria Bluetooth junto, que o app nao usa).
+        // So abre o pedido se ainda nao tiver: o dialogo pausa o app.
+        const MIC = PermissionsAndroid.PERMISSIONS.RECORD_AUDIO;
+        const granted =
+          (await PermissionsAndroid.check(MIC)) ||
+          (await PermissionsAndroid.request(MIC)) === PermissionsAndroid.RESULTS.GRANTED;
 
         if (!granted || cancelled) {
           setPitchData({
