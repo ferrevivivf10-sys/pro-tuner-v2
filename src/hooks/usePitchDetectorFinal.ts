@@ -37,6 +37,7 @@ const SAME_NOTE_CENTS = 50;     // leituras dentro disso contam como a mesma not
 const CONFIRM_FRAMES = 2;       // leituras seguidas para trocar de nota
 const OCTAVE_CONFIRM_FRAMES = 3; // pulo de oitava exige mais confirmacao
 const HOLD_MS = 200;            // segura a nota exibida apos o som sumir
+const HOLD_SOUND_MS = 600;      // segura mais se ainda ha som (leitura suja por ruido)
 const MIC_MAX_FREQ = 700;       // acima disso e ruido do ambiente (Mi agudo na 12a casa = 659 Hz)
 
 // Clareza minima no mic conforme a sensibilidade escolhida.
@@ -195,7 +196,7 @@ export function usePitchDetectorFinal(
                 (clar !== undefined ? " · clar " + clar.toFixed(2) : "") +
                 " · n=" + lastChunkLenRef.current;
 
-              // Limpa a nota exibida (silencio ou ruido por mais de HOLD_MS)
+              // Limpa a nota exibida (silencio por HOLD_MS ou ruido por HOLD_SOUND_MS)
               const clearNote = (text: string) => {
                 stableFreqRef.current = 0;
                 candCountRef.current = 0;
@@ -227,7 +228,7 @@ export function usePitchDetectorFinal(
               const lowClarity =
                 stabilize && (clarity < micMinClarity(sensitivity) || freq > MIC_MAX_FREQ);
               if (freq <= 0 || lowClarity) {
-                if (stabilize && now - lastAcceptRef.current >= HOLD_MS) {
+                if (stabilize && now - lastAcceptRef.current >= HOLD_SOUND_MS) {
                   clearNote(diag("SEM NOTA · ", clarity));
                   return;
                 }
