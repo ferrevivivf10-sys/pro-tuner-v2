@@ -17,7 +17,7 @@
  */
 const MIN_FREQ = 60;    // abaixo do E2 (~82Hz) com margem
 const MAX_FREQ = 1200;  // acima do E4 (~330Hz) e harmonicos
-const CLARITY_THRESHOLD = 0.85; // fracao do maior pico exigida pra aceitar um pico menor (mais agudo)
+const CLARITY_THRESHOLD = 0.90; // fracao do maior pico exigida pra aceitar um pico menor (mais agudo). 0.90 medido em gravacoes reais (aco e nylon)
 const MIN_CLARITY_ACCEPT = 0.3; // abaixo disso o sinal nao e periodico o suficiente, descarta
 const TARGET_RMS = 0.15;        // nivel alvo apos normalizacao
 const MIN_RMS = 0.0008;         // abaixo disso e silencio real, ignora
