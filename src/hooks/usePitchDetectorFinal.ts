@@ -38,6 +38,7 @@ const SAME_NOTE_CENTS = 50;     // leituras dentro disso contam como a mesma not
 const CONFIRM_FRAMES = 2;       // leituras seguidas para trocar de nota
 const OCTAVE_CONFIRM_FRAMES = 3; // pulo de oitava exige mais confirmacao
 const HOLD_MS = 200;            // segura a nota exibida apos o som sumir
+const MIC_MAX_FREQ = 1000;      // acima disso e ruido do ambiente (ex.: tom de ~1070 Hz)
 
 function centsBetween(a: number, b: number): number {
   return 1200 * Math.log2(a / b);
@@ -210,8 +211,8 @@ export function usePitchDetectorFinal(
                 return;
               }
 
-              const { frequency: freq, clarity } = MPMProcessor.detectPitch(chunk, SAMPLE_RATE);
-              const lowClarity = stabilize && clarity < MIC_MIN_CLARITY;
+              let { frequency: freq, clarity } = MPMProcessor.detectPitch(chunk, SAMPLE_RATE);
+              const lowClarity = stabilize && (clarity < MIC_MIN_CLARITY || freq > MIC_MAX_FREQ);
               if (freq <= 0 || lowClarity) {
                 if (stabilize && now - lastAcceptRef.current >= HOLD_MS) {
                   clearNote(diag("SEM NOTA · ", clarity));
@@ -233,6 +234,11 @@ export function usePitchDetectorFinal(
 
               if (stabilize) {
                 const stable = stableFreqRef.current;
+                // Dobra de oitava: no fim da corda o harmonico (2x) domina;
+                // com nota ja confirmada, trata como a mesma nota.
+                if (stable > 0 && Math.abs(centsBetween(freq, stable) - 1200) < SAME_NOTE_CENTS) {
+                  freq = freq / 2;
+                }
                 if (stable > 0 && Math.abs(centsBetween(freq, stable)) < SAME_NOTE_CENTS) {
                   // mesma nota: aceita direto
                   stableFreqRef.current = freq;
