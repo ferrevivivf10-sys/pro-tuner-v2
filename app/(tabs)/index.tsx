@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
+import { useAudioDevices } from "@siteed/audio-studio";
 import { ScreenContainer } from "@/components/screen-container";
 import { PitchLabDisplay } from "@/src/components/PitchLabDisplay";
 import { DEFAULT_RING_STYLE } from "@/src/components/TunerDial";
@@ -21,6 +22,14 @@ import { SettingsManager, type TunerSettings } from "@/src/utils/SettingsManager
 
 const KEEP_AWAKE_TAG = "pro-tuner";
 const TUNING_OPTIONS = ["Standard", "DropD", "HalfStepDown", "FullStepDown", "OpenG"] as const;
+
+// Modo cabo: entrada USB/fone plugada. Sem ruido ambiente, entao usa
+// limites fixos medidos no violao (chiado ~0.0013 RMS / clareza <= 0.36;
+// nota real >= 0.014 RMS / clareza >= 0.82).
+const CABLE_TYPES = ["usb", "wired_headset"];
+const MIC_NOISE_THRESHOLD = 0.001;
+const CABLE_NOISE_THRESHOLD = 0.003;
+const CABLE_SENSITIVITY = 0.5; // equivale a clareza minima de 0.6
 
 export default function TunerScreen() {
   const [settings, setSettings] = useState<TunerSettings | null>(null);
@@ -57,11 +66,15 @@ export default function TunerScreen() {
     }, [loadSettings])
   );
 
+  const { devices } = useAudioDevices();
+  const isCable = devices.some((d) => CABLE_TYPES.includes(d.type) && d.isAvailable);
+  const sensitivity = isCable ? CABLE_SENSITIVITY : settings?.sensitivity ?? 0.7;
+
   const pitchData = usePitchDetectorFinal(
     isActive,
     settings?.refA4 ?? 440,
-    0.001,
-    settings?.sensitivity ?? 0.7
+    isCable ? CABLE_NOISE_THRESHOLD : MIC_NOISE_THRESHOLD,
+    sensitivity
   );
 
   // Tela sempre ligada enquanto o afinador esta ativo e nesta aba
@@ -104,7 +117,10 @@ export default function TunerScreen() {
         <View style={styles.header}>
           <View style={styles.statusRow}>
             <View style={[styles.dot, { backgroundColor: isActive ? "#00E676" : "#555" }]} />
-            <Text style={styles.statusText}>{isActive ? "Ativo" : "Pausado"}</Text>
+            <Text style={styles.statusText}>
+              {isActive ? "Ativo" : "Pausado"}
+              {isCable ? " · Cabo" : ""}
+            </Text>
           </View>
           <Text style={styles.calibText}>A4 = {settings?.refA4 ?? 440} Hz</Text>
         </View>
@@ -113,7 +129,7 @@ export default function TunerScreen() {
           <PitchLabDisplay
             frequency={pitchData.frequency}
             confidence={pitchData.confidence}
-            sensitivity={settings?.sensitivity ?? 0.7}
+            sensitivity={sensitivity}
             refA4={settings?.refA4 ?? 440}
             ringStyle={settings?.ringStyle ?? DEFAULT_RING_STYLE}
             selectedTuning={settings?.selectedTuning ?? "Standard"}
