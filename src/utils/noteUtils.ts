@@ -56,7 +56,7 @@ export const TUNINGS = {
   DropD: [73.42, 110.0, 146.83, 196.0, 246.94, 329.63], // D2 A2 D3 G3 B3 E4
   HalfStepDown: [77.78, 103.83, 138.59, 185.0, 233.08, 311.13], // D#2 G#2 C#3 F#3 A#3 D#4
   FullStepDown: [73.42, 98.0, 130.81, 174.61, 220.0, 293.66], // D2 G2 C3 F3 A3 D4
-  OpenG: [82.41, 98.0, 146.83, 196.0, 246.94, 392.0], // E2 G2 D3 G3 B3 G4
+  OpenG: [73.42, 98.0, 146.83, 196.0, 246.94, 293.66], // D2 G2 D3 G3 B3 D4
 };
 
 export type TuningName = keyof typeof TUNINGS;

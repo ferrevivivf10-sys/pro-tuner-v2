@@ -83,7 +83,7 @@ const TUNING_STRING_NAMES: Record<string, string[]> = {
   DropD: ["D2", "A2", "D3", "G3", "B3", "E4"],
   HalfStepDown: ["Eb2", "Ab2", "Db3", "Gb3", "Bb3", "Eb4"],
   FullStepDown: ["D2", "G2", "C3", "F3", "A3", "D4"],
-  OpenG: ["E2", "G2", "D3", "G3", "B3", "G4"],
+  OpenG: ["D2", "G2", "D3", "G3", "B3", "D4"],
 };
 
 // Numero MIDI de cada nota de corda usada nas afinacoes. A frequencia e
