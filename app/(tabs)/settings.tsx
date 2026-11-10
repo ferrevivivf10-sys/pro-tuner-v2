@@ -13,6 +13,7 @@ import {
   Alert,
 } from "react-native";
 import Constants from "expo-constants";
+import { router } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { TUNINGS, TUNING_LABELS, type TuningName } from "@/src/utils/noteUtils";
 import { SettingsManager } from "@/src/utils/SettingsManager";
@@ -119,6 +120,21 @@ export default function SettingsScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>⚙️ CONFIGURAÇÕES</Text>
         </View>
+
+        {/* Entradas de áudio (subtela) */}
+        <TouchableOpacity
+          style={styles.linkRow}
+          onPress={() => router.push("/audio-inputs")}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Entradas de áudio"
+        >
+          <View>
+            <Text style={styles.sectionTitle}>Entradas de áudio</Text>
+            <Text style={styles.linkDescription}>Microfone ou cabo do instrumento</Text>
+          </View>
+          <Text style={styles.linkArrow}>›</Text>
+        </TouchableOpacity>
 
         {/* Seção de Calibração */}
         <View style={styles.section}>
@@ -316,6 +332,26 @@ const styles = StyleSheet.create({
   },
   section: {
     marginBottom: 32,
+  },
+  linkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#1A1A1A",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#333333",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 32,
+  },
+  linkDescription: {
+    fontSize: 12,
+    color: "#888888",
+  },
+  linkArrow: {
+    fontSize: 28,
+    color: "#00E676",
   },
   sectionTitle: {
     fontSize: 16,
