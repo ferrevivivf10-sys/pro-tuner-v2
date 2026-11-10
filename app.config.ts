@@ -20,7 +20,7 @@ const config: ExpoConfig = {
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
   ios: {
-    supportsTablet: true,
+    supportsTablet: false,
     bundleIdentifier: env.iosBundleId,
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
@@ -45,19 +45,6 @@ const config: ExpoConfig = {
       "android.permission.BLUETOOTH_CONNECT",
       "android.permission.USB_PERMISSION",
     ],
-    intentFilters: [
-      {
-        action: "VIEW",
-        autoVerify: true,
-        data: [
-          {
-            scheme: env.scheme,
-            host: "*",
-          },
-        ],
-        category: ["BROWSABLE", "DEFAULT"],
-      },
-    ],
   },
   web: {
     bundler: "metro",
@@ -74,12 +61,9 @@ const config: ExpoConfig = {
         enableBackgroundAudio: false,
         enableNotifications: false,
         enablePhoneStateHandling: false,
-      },
-    ],
-    [
-      "expo-audio",
-      {
-        microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone.",
+        iosConfig: {
+          microphoneUsageDescription: "O Pro Tuner usa o microfone para detectar a afinação.",
+        },
       },
     ],
     [
