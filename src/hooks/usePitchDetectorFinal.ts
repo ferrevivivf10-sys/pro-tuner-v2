@@ -37,7 +37,7 @@ const SAME_NOTE_CENTS = 50;     // leituras dentro disso contam como a mesma not
 const CONFIRM_FRAMES = 2;       // leituras seguidas para trocar de nota
 const OCTAVE_CONFIRM_FRAMES = 3; // pulo de oitava exige mais confirmacao
 const HOLD_MS = 200;            // segura a nota exibida apos o som sumir
-const MIC_MAX_FREQ = 1000;      // acima disso e ruido do ambiente (ex.: tom de ~1070 Hz)
+const MIC_MAX_FREQ = 700;       // acima disso e ruido do ambiente (Mi agudo na 12a casa = 659 Hz)
 
 // Clareza minima no mic conforme a sensibilidade escolhida.
 // Ruido/voz medidos ficam abaixo de ~0.75.
