@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
+  AppState,
 } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
@@ -36,6 +37,15 @@ export default function TunerScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isActive, setIsActive] = useState(false);
   const [tuningModalVisible, setTuningModalVisible] = useState(false);
+  const [appInForeground, setAppInForeground] = useState(AppState.currentState === "active");
+
+  // Libera o microfone quando o app sai da tela
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      setAppInForeground(state === "active");
+    });
+    return () => sub.remove();
+  }, []);
 
   const loadSettings = useCallback(async () => {
     const loaded = await SettingsManager.loadSettings();
@@ -71,7 +81,7 @@ export default function TunerScreen() {
   const sensitivity = isCable ? CABLE_SENSITIVITY : settings?.sensitivity ?? 0.7;
 
   const pitchData = usePitchDetectorFinal(
-    isActive,
+    isActive && appInForeground,
     settings?.refA4 ?? 440,
     isCable ? CABLE_NOISE_THRESHOLD : MIC_NOISE_THRESHOLD,
     sensitivity,

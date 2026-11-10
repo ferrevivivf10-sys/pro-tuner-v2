@@ -138,6 +138,7 @@ export function usePitchDetectorFinal(
           channels: 1,
           encoding: "pcm_16bit",
           interval: 100,
+          keepAwake: false, // nao grava em segundo plano
 
           onAudioStream: async (event: any) => {
             if (!isActiveRef.current) return;
