@@ -44,12 +44,18 @@
 
 ## Pendente
 
-- [ ] Testar build v1.0.30 (corte 1000 Hz + dobra de oitava) em ambiente com ruído
-- [ ] Bateria: desligar `keepAwake` da gravação (hoje grava em segundo plano)
-- [ ] Bateria: pausar o mic quando o app vai pro segundo plano
-- [ ] Mover a aba `devices` para uma subtela "Entradas de áudio" em Settings
+- [ ] **Lembrete:** o próximo build já leva os testes automatizados (commit `4378c69`) — conferir no log do Actions o passo "Testes" passando (7 testes)
+- [ ] Testar build da rodada de melhorias (checklist de 7 itens)
+- [x] Bateria: `keepAwake` desligado e mic pausa em segundo plano
+- [x] Aba `devices` virou subtela "Entradas de áudio" em Ajustes
+- [x] Sensibilidade controla a clareza mínima no mic (0.85 / 0.75 / 0.65)
+- [x] Afinações e abas em português; Open G corrigido (D2 G2 D3 G3 B3 D4)
+- [x] Permissões não usadas removidas; sobras do template removidas
+- [x] Testes automatizados do detector MPM (`npm test`, rodam no build)
 - [ ] Remover o texto de diagnóstico antes de ir pra `main`
-- [ ] Rever a opção de sensibilidade (no mic a clareza mínima 0.75 já domina)
+- [ ] Assinatura própria do APK (chave + segredo no GitHub)
+- [ ] Acessibilidade no Afinador e em Ajustes
+- [ ] Separar a lógica de estabilidade do hook e testar
 - [ ] Merge de `cabo-etapa1` na `main` após aprovação no celular
 - [ ] Limpar branches `teste` e `backup-sabado`
 - [ ] Testar o fluxo completo de afinação em dispositivo Android real
