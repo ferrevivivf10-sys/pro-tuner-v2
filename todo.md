@@ -42,19 +42,20 @@
 - [x] Dobra de oitava: harmônico 2x no fim da corda conta como a mesma nota
 - Resultado medido em ambiente com ruído: leituras ruins de 20,7% para 2,1%
 
-## Próximo build (aguardando liberação)
+## Próximo build (implementado, aguardando liberação)
 
 Validado offline com as gravações do modo de teste (aço, nylon, cabo).
 
-- [ ] Pico híbrido (0.90, volta pra 0.85 se der uma oitava acima e ≥ 125 Hz) + teste do Mi agudo
-- [ ] Dobra de oitava só quando a nota estável é uma corda da afinação
-- [ ] Correção de sub-harmônico: usa f/2 ou f/3 se a NSDF em 2T/3T for ≥ 0.05 maior que em T (ataque do nylon)
-- [ ] Display segura a nota 300 ms (era 600) e remove a mediana do hook
-- [ ] Mic para na aba Ajustes
-- [ ] Modo de teste vira opção em Ajustes (com escolha de fonte de áudio sem processamento)
-- [ ] Numeração das cordas (Mi grave = 6ª) e "instrumento" no lugar de "guitarra"
-- [ ] Atualizar lista de entradas ao abrir o afinador e ao voltar pro app (bug do cabo)
-- [ ] Filtro passa-baixa 1500 Hz: **fora do padrão** — só como opção no modo de teste (pode mostrar nota em pausas com ruído)
+- [x] Pico híbrido (0.90, volta pra 0.85 se der uma oitava acima e ≥ 125 Hz) + teste com áudio real do Mi agudo
+- [x] Correção de sub-harmônico: usa f/2 ou f/3 se a NSDF em 2T/3T for ≥ 0.05 maior que em T (ataque do nylon) + teste com áudio real
+- [x] Dobra de oitava só quando a nota estável é uma corda da afinação
+- [x] Display segura a nota 400 ms (era 600) e o hook não usa mais mediana
+- [x] Mic para ao sair da aba do afinador
+- [x] Modo de teste vira opção em Ajustes (botão de gravar + dados técnicos só aparecem com ele ligado)
+- [x] Filtro passa-baixa 1500 Hz como opção do modo de teste (fora do padrão)
+- [x] Numeração das cordas (6ª = mais grave) e "instrumento" no lugar de "guitarra"
+- [x] Relê a lista de entradas ao abrir o afinador e ao voltar pro app (bug do cabo)
+- [ ] Fonte de áudio sem processamento: só existe na `@siteed/audio-studio` 4.x (beta) — fica pra depois
 
 ## Pendente
 
@@ -66,7 +67,7 @@ Validado offline com as gravações do modo de teste (aço, nylon, cabo).
 - [x] Afinações e abas em português; Open G corrigido (D2 G2 D3 G3 B3 D4)
 - [x] Permissões não usadas removidas; sobras do template removidas
 - [x] Testes automatizados do detector MPM (`npm test`, rodam no build)
-- [ ] Remover o texto de diagnóstico antes de ir pra `main`
+- [x] Texto de diagnóstico só aparece no modo de teste
 - [ ] Assinatura própria do APK (chave + segredo no GitHub)
 - [ ] Acessibilidade no Afinador e em Ajustes
 - [ ] Separar a lógica de estabilidade do hook e testar

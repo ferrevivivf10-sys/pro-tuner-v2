@@ -14,6 +14,8 @@ export interface TunerSettings {
   sensitivity: number;
   noiseThreshold: number;
   ringStyle: RingStyleName;
+  testMode: boolean;    // mostra o botao de gravar teste e o texto de diagnostico
+  testLowpass: boolean; // modo de teste: filtro passa-baixa de 1500 Hz no microfone
 }
 
 const STORAGE_KEY = "@pro_tuner_settings";
@@ -24,6 +26,8 @@ const DEFAULT_SETTINGS: TunerSettings = {
   sensitivity: 0.7,
   noiseThreshold: 0.005,
   ringStyle: DEFAULT_RING_STYLE,
+  testMode: false,
+  testLowpass: false,
 };
 
 export class SettingsManager {
@@ -60,6 +64,8 @@ export class SettingsManager {
           typeof parsed.ringStyle === "string" && isRingStyle(parsed.ringStyle)
             ? parsed.ringStyle
             : DEFAULT_SETTINGS.ringStyle,
+        testMode: parsed.testMode === true,
+        testLowpass: parsed.testLowpass === true,
       };
     } catch (error) {
       console.error("SettingsManager.loadSettings error:", error);
@@ -102,5 +108,13 @@ export class SettingsManager {
 
   static async setRingStyle(value: RingStyleName): Promise<void> {
     await this.updateField("ringStyle", value);
+  }
+
+  static async setTestMode(value: boolean): Promise<void> {
+    await this.updateField("testMode", value);
+  }
+
+  static async setTestLowpass(value: boolean): Promise<void> {
+    await this.updateField("testLowpass", value);
   }
 }

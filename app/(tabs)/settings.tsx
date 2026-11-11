@@ -40,6 +40,8 @@ export default function SettingsScreen() {
   const [sensitivity, setSensitivity] = useState(0.7);
   const [noiseThreshold, setNoiseThreshold] = useState(0.02);
   const [ringStyle, setRingStyle] = useState<RingStyleName>(DEFAULT_RING_STYLE);
+  const [testMode, setTestMode] = useState(false);
+  const [testLowpass, setTestLowpass] = useState(false);
 
   // Carregar configurações salvas
   useEffect(() => {
@@ -51,6 +53,8 @@ export default function SettingsScreen() {
         setSensitivity(settings.sensitivity);
         setNoiseThreshold(settings.noiseThreshold);
         setRingStyle(settings.ringStyle);
+        setTestMode(settings.testMode);
+        setTestLowpass(settings.testLowpass);
       } catch (error) {
         console.error("Erro ao carregar configurações:", error);
       }
@@ -100,6 +104,25 @@ export default function SettingsScreen() {
       setRingStyle(value);
     } catch (error) {
       console.error("Erro ao salvar estilo do aro:", error);
+    }
+  };
+
+  // Salvar opções do modo de teste
+  const saveTestMode = async (value: boolean) => {
+    try {
+      await SettingsManager.setTestMode(value);
+      setTestMode(value);
+    } catch (error) {
+      console.error("Erro ao salvar modo de teste:", error);
+    }
+  };
+
+  const saveTestLowpass = async (value: boolean) => {
+    try {
+      await SettingsManager.setTestLowpass(value);
+      setTestLowpass(value);
+    } catch (error) {
+      console.error("Erro ao salvar filtro de teste:", error);
     }
   };
 
@@ -173,7 +196,7 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Modo de Afinação</Text>
           <Text style={styles.sectionDescription}>
-            Escolha o padrão de afinação para sua guitarra
+            Escolha o padrão de afinação do seu instrumento
           </Text>
 
           <View style={styles.tuningsContainer}>
@@ -205,8 +228,9 @@ export default function SettingsScreen() {
                 <View style={styles.stringFrequencies}>
                   {TUNINGS[tuningName].map((freq, idx) => (
                     <View key={idx} style={styles.stringFreq}>
+                      {/* 6ª = corda mais grave, 1ª = mais aguda */}
                       <Text style={styles.stringLabel}>
-                        {idx + 1}
+                        {TUNINGS[tuningName].length - idx}ª
                       </Text>
                       <Text style={styles.stringFreqValue}>
                         {freq.toFixed(1)}
@@ -292,12 +316,69 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* Seção do Modo de teste */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Modo de teste</Text>
+          <Text style={styles.sectionDescription}>
+            Mostra no afinador o botão de gravar teste (áudio + leituras) e os
+            dados técnicos da captação.
+          </Text>
+
+          <View style={styles.optionsContainer}>
+            {[false, true].map((value) => {
+              const isActive = testMode === value;
+              return (
+                <TouchableOpacity
+                  key={String(value)}
+                  style={[styles.optionButton, isActive && styles.optionButtonActive]}
+                  onPress={() => saveTestMode(value)}
+                  accessibilityRole="button"
+                  accessibilityLabel={"Modo de teste " + (value ? "ligado" : "desligado")}
+                >
+                  <Text style={[styles.optionText, isActive && styles.optionTextActive]}>
+                    {value ? "Ligado" : "Desligado"}
+                  </Text>
+                  {isActive && <Text style={styles.checkmark}>✓</Text>}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {testMode && (
+            <>
+              <Text style={[styles.sectionDescription, styles.subOption]}>
+                Filtro de agudos (1500 Hz), só no microfone. Experimental: ajuda
+                com barulho, mas pode mostrar nota nas pausas.
+              </Text>
+              <View style={styles.optionsContainer}>
+                {[false, true].map((value) => {
+                  const isActive = testLowpass === value;
+                  return (
+                    <TouchableOpacity
+                      key={String(value)}
+                      style={[styles.optionButton, isActive && styles.optionButtonActive]}
+                      onPress={() => saveTestLowpass(value)}
+                      accessibilityRole="button"
+                      accessibilityLabel={"Filtro de agudos " + (value ? "ligado" : "desligado")}
+                    >
+                      <Text style={[styles.optionText, isActive && styles.optionTextActive]}>
+                        {value ? "Ligado" : "Desligado"}
+                      </Text>
+                      {isActive && <Text style={styles.checkmark}>✓</Text>}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </>
+          )}
+        </View>
+
         {/* Informações */}
         <View style={styles.infoSection}>
           <Text style={styles.infoTitle}>ℹ️ Informações</Text>
           <Text style={styles.infoText}>
             • A calibração padrão é 440 Hz (A4){"\n"}
-            • Afinação padrão para guitarra é Standard{"\n"}
+            • A afinação mais comum é a Padrão (Mi Lá Ré Sol Si Mi){"\n"}
             • Altere conforme necessário para seu instrumento
           </Text>
         </View>
@@ -364,6 +445,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#888888",
     marginBottom: 16,
+  },
+  subOption: {
+    marginTop: 16,
   },
   optionsContainer: {
     flexDirection: "row",

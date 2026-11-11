@@ -6,7 +6,7 @@
  * - Indicador de acao no centro: AFROUXAR (agudo) / APERTAR (grave) / AFINADO
  * - Linhas das cordas atravessam a tela toda; so a ativa brilha
  * - Trava manual: tocar no nome de uma corda fixa a leitura nela
- * - Suavizacao: hold da nota (600ms) e media movel de cents
+ * - Suavizacao: hold da nota (400ms) e media movel de cents
  */
 
 import React, { useEffect, useRef, memo, useMemo, useState, useCallback } from "react";
@@ -47,7 +47,7 @@ const BASE_Y = RING_CY - ((CHORD_COUNT - 1) * CHORD_SPACING) / 2;
 const STRING_AREA_WIDTH = SCREEN_WIDTH;
 
 // ===== Parametros de SUAVIZACAO =====
-const NOTE_HOLD_MS = 600;        // tempo que a nota permanece apos o som sumir
+const NOTE_HOLD_MS = 400;        // tempo que a nota permanece apos o som sumir
 const CENTS_SMOOTH_SIZE = 5;     // media movel das ultimas N leituras de cents
 const LOCK_HIT_HEIGHT = 40;      // altura da area de toque de cada corda (modo manual)
 const STRING_GUARD_CENTS = 250;  // ~metade da distancia entre cordas; acima disso o sinal esta longe de qualquer corda

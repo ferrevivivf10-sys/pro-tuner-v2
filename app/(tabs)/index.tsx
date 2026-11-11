@@ -1,7 +1,7 @@
 /**
  * TunerScreen — Tela principal do Pro Tuner (tema OLED puro)
  */
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -20,7 +20,7 @@ import { PitchLabDisplay } from "@/src/components/PitchLabDisplay";
 import { DEFAULT_RING_STYLE } from "@/src/components/TunerDial";
 import { usePitchDetectorFinal } from "@/src/hooks/usePitchDetectorFinal";
 import { SettingsManager, type TunerSettings } from "@/src/utils/SettingsManager";
-import { TUNING_LABELS, type TuningName } from "@/src/utils/noteUtils";
+import { TUNINGS, TUNING_LABELS, type TuningName } from "@/src/utils/noteUtils";
 import Constants from "expo-constants";
 import { TestRecorder, TEST_MAX_SECONDS } from "@/src/audio/TestRecorder";
 
@@ -44,14 +44,28 @@ export default function TunerScreen() {
   const [testSaving, setTestSaving] = useState(false);
   const testTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [appInForeground, setAppInForeground] = useState(AppState.currentState === "active");
+  const [tabFocused, setTabFocused] = useState(true);
 
-  // Libera o microfone quando o app sai da tela
+  const { devices, refreshDevices } = useAudioDevices();
+
+  // Libera o microfone quando o app sai da tela. Ao voltar, rele as entradas:
+  // o aviso de cabo plugado se perde com o app em segundo plano.
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
       setAppInForeground(state === "active");
+      if (state === "active") refreshDevices().catch(() => {});
     });
     return () => sub.remove();
-  }, []);
+  }, [refreshDevices]);
+
+  // Microfone so fica ligado com a aba do afinador aberta
+  useFocusEffect(
+    useCallback(() => {
+      setTabFocused(true);
+      refreshDevices().catch(() => {});
+      return () => setTabFocused(false);
+    }, [refreshDevices])
+  );
 
   const loadSettings = useCallback(async () => {
     const loaded = await SettingsManager.loadSettings();
@@ -82,16 +96,28 @@ export default function TunerScreen() {
     }, [loadSettings])
   );
 
-  const { devices } = useAudioDevices();
   const isCable = devices.some((d) => CABLE_TYPES.includes(d.type) && d.isAvailable);
   const sensitivity = isCable ? CABLE_SENSITIVITY : settings?.sensitivity ?? 0.7;
 
+  const testMode = settings?.testMode ?? false;
+  const testLowpass = testMode && !isCable && (settings?.testLowpass ?? false);
+
+  // Cordas da afinacao escolhida, corrigidas pelo A4
+  const refA4 = settings?.refA4 ?? 440;
+  const selectedTuning = settings?.selectedTuning ?? "Standard";
+  const stringFreqs = useMemo(
+    () => (TUNINGS[selectedTuning as TuningName] ?? TUNINGS.Standard).map((f) => (f * refA4) / 440),
+    [selectedTuning, refA4]
+  );
+
   const pitchData = usePitchDetectorFinal(
-    isActive && appInForeground,
-    settings?.refA4 ?? 440,
+    isActive && appInForeground && tabFocused,
+    refA4,
     isCable ? CABLE_NOISE_THRESHOLD : MIC_NOISE_THRESHOLD,
     sensitivity,
-    !isCable // estabilidade so no microfone
+    !isCable, // estabilidade so no microfone
+    stringFreqs,
+    testLowpass
   );
 
   // Tela sempre ligada enquanto o afinador esta ativo e nesta aba
@@ -136,6 +162,7 @@ export default function TunerScreen() {
       "versao=" + (Constants.expoConfig?.version ?? "?") +
       " modo=" + (isCable ? "cabo" : "mic") +
       " sensibilidade=" + sensitivity +
+      " filtro=" + (testLowpass ? "1500" : "nao") +
       " a4=" + (settings?.refA4 ?? 440) +
       " data=" + new Date().toISOString()
     );
@@ -147,7 +174,7 @@ export default function TunerScreen() {
       }
       setTestSeconds(TestRecorder.seconds());
     }, 500);
-  }, [isActive, isCable, sensitivity, settings, finishTest]);
+  }, [isActive, isCable, sensitivity, settings, testLowpass, finishTest]);
 
   const selectTuning = useCallback(async (tuning: string) => {
     try {
@@ -196,22 +223,25 @@ export default function TunerScreen() {
           />
         </View>
 
-        <Text style={styles.methodText}>{pitchData.detectionMethod}</Text>
-
-        {/* DIAGNOSTICO: grava audio + registro de leituras (sai antes da main) */}
-        <TouchableOpacity
-          style={[styles.testBtn, testSeconds !== null && styles.testBtnOn]}
-          onPress={toggleTest}
-          disabled={testSaving}
-        >
-          <Text style={[styles.testBtnText, testSeconds !== null && styles.testBtnTextOn]}>
-            {testSaving
-              ? "SALVANDO..."
-              : testSeconds !== null
-                ? "■ PARAR E SALVAR  " + Math.floor(testSeconds) + "s / " + TEST_MAX_SECONDS + "s"
-                : "● GRAVAR TESTE"}
-          </Text>
-        </TouchableOpacity>
+        {/* Modo de teste (Ajustes): dados da captacao + gravar audio e leituras */}
+        {(testMode || testSeconds !== null || testSaving) && (
+          <>
+            <Text style={styles.methodText}>{pitchData.detectionMethod}</Text>
+            <TouchableOpacity
+              style={[styles.testBtn, testSeconds !== null && styles.testBtnOn]}
+              onPress={toggleTest}
+              disabled={testSaving}
+            >
+              <Text style={[styles.testBtnText, testSeconds !== null && styles.testBtnTextOn]}>
+                {testSaving
+                  ? "SALVANDO..."
+                  : testSeconds !== null
+                    ? "■ PARAR E SALVAR  " + Math.floor(testSeconds) + "s / " + TEST_MAX_SECONDS + "s"
+                    : "● GRAVAR TESTE"}
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
 
         {/* Linha divisória fina antes da área de controle */}
         <View style={styles.divider} />

@@ -1,5 +1,5 @@
 /**
- * TestRecorder — DIAGNOSTICO (sai antes da main).
+ * TestRecorder — modo de teste (ligado em Ajustes).
  * Grava o audio exato que o detector recebeu + um registro de cada leitura,
  * e salva os dois arquivos (.wav e .csv) numa pasta escolhida pelo usuario.
  */

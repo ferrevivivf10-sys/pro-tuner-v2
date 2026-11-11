@@ -39,7 +39,7 @@ const CONFIRM_FRAMES = 2;       // leituras seguidas para trocar de nota
 const OCTAVE_CONFIRM_FRAMES = 3; // pulo de oitava exige mais confirmacao
 const HOLD_MS = 200;            // segura a nota exibida apos o som sumir
 const HOLD_SOUND_MS = 600;      // segura mais se ainda ha som (leitura suja por ruido)
-const SMOOTH_FRAMES = 3;        // mediana das ultimas leituras para o ponteiro tremer menos
+const FOLD_STRING_CENTS = 150;  // a dobra de oitava so vale se a nota estavel for uma corda da afinacao
 const MIC_MAX_FREQ = 700;       // acima disso e ruido do ambiente (Mi agudo na 12a casa = 659 Hz)
 
 // Clareza minima no mic conforme a sensibilidade escolhida.
@@ -54,9 +54,23 @@ function centsBetween(a: number, b: number): number {
   return 1200 * Math.log2(a / b);
 }
 
-function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)];
+// Filtro passa-baixa de 2a ordem (biquad Butterworth), opcional no modo de teste.
+const LOWPASS_HZ = 1500;
+const LP = (() => {
+  const w0 = (2 * Math.PI * LOWPASS_HZ) / SAMPLE_RATE;
+  const c = Math.cos(w0);
+  const alpha = Math.sin(w0) / (2 * Math.SQRT1_2);
+  const a0 = 1 + alpha;
+  return { b0: (1 - c) / 2 / a0, b1: (1 - c) / a0, a1: (-2 * c) / a0, a2: (1 - alpha) / a0 };
+})();
+
+// Junta o bloco novo ao buffer, mantendo so as ultimas MAX_BUFFER amostras
+function appendTail(prev: Float32Array, samples: Float32Array): Float32Array {
+  const len = prev.length + samples.length;
+  const combined = new Float32Array(len);
+  combined.set(prev, 0);
+  combined.set(samples, prev.length);
+  return len > MAX_BUFFER ? combined.slice(len - MAX_BUFFER) : combined;
 }
 
 function isOctaveJump(a: number, b: number): boolean {
@@ -105,7 +119,9 @@ export function usePitchDetectorFinal(
   refA4: number = 440,
   noiseThreshold: number = 0.001,
   sensitivity: number = 0.8,
-  stabilize: boolean = false
+  stabilize: boolean = false,
+  stringFreqs: number[] = [], // cordas da afinacao (Hz, ja com o A4 escolhido)
+  lowpass: boolean = false    // modo de teste: filtra o audio antes do detector
 ): PitchData {
   const [pitchData, setPitchData] = useState<PitchData>(INITIAL_PITCH_DATA);
 
@@ -117,13 +133,20 @@ export function usePitchDetectorFinal(
   const candFreqRef = useRef(0);     // candidata a nova nota (Hz)
   const candCountRef = useRef(0);    // leituras seguidas da candidata
   const lastAcceptRef = useRef(0);   // quando a ultima leitura foi aceita
-  const recentFreqsRef = useRef<number[]>([]); // ultimas leituras aceitas da nota atual
+  const stringFreqsRef = useRef(stringFreqs);
+  const lowpassRef = useRef(lowpass);
+  const filteredRef = useRef<Float32Array>(new Float32Array(0)); // mesmo buffer, filtrado
+  const lpStateRef = useRef({ x1: 0, x2: 0, y1: 0, y2: 0 });
 
   const { startRecording, stopRecording } = useAudioRecorder();
 
   useEffect(() => {
     isActiveRef.current = isActive;
   }, [isActive]);
+
+  // Lidos por ref para nao reiniciar a gravacao quando mudam
+  stringFreqsRef.current = stringFreqs;
+  lowpassRef.current = lowpass;
 
   useEffect(() => {
     if (Platform.OS === "web") return;
@@ -168,17 +191,21 @@ export function usePitchDetectorFinal(
             lastChunkLenRef.current = samples.length;
             TestRecorder.addSamples(samples); // DIAGNOSTICO: so grava se o teste estiver ligado
 
-            // Concatena mantendo so as ultimas MAX_BUFFER amostras
-            const prev = bufferRef.current;
-            const combinedLen = prev.length + samples.length;
-            const combined = new Float32Array(combinedLen);
-            combined.set(prev, 0);
-            combined.set(samples, prev.length);
+            // Copia filtrada do mesmo bloco (o estado do filtro continua entre blocos)
+            const filtered = new Float32Array(samples.length);
+            const lp = lpStateRef.current;
+            for (let i = 0; i < samples.length; i++) {
+              const x = samples[i];
+              const y = LP.b0 * x + LP.b1 * lp.x1 + LP.b0 * lp.x2 - LP.a1 * lp.y1 - LP.a2 * lp.y2;
+              lp.x2 = lp.x1;
+              lp.x1 = x;
+              lp.y2 = lp.y1;
+              lp.y1 = y;
+              filtered[i] = y;
+            }
 
-            bufferRef.current =
-              combinedLen > MAX_BUFFER
-                ? combined.slice(combinedLen - MAX_BUFFER)
-                : combined;
+            bufferRef.current = appendTail(bufferRef.current, samples);
+            filteredRef.current = appendTail(filteredRef.current, filtered);
 
             // Processa APENAS a janela mais recente. Antes este trecho varria
             // todas as janelas sobrepostas do buffer (~4 por callback), o que
@@ -188,8 +215,16 @@ export function usePitchDetectorFinal(
             const buf = bufferRef.current;
             if (buf.length >= BUFFER_SIZE) {
               const chunk = buf.subarray(buf.length - BUFFER_SIZE);
+              const fbuf = filteredRef.current;
+              // O detector le o audio filtrado so se o filtro estiver ligado;
+              // o volume (RMS) e sempre medido no audio original.
+              const detChunk =
+                lowpassRef.current && fbuf.length === buf.length
+                  ? fbuf.subarray(fbuf.length - BUFFER_SIZE)
+                  : chunk;
               // Mantem um rabo do buffer para a proxima janela ter sobreposicao
               bufferRef.current = buf.slice(buf.length - HOP_SIZE);
+              filteredRef.current = fbuf.slice(Math.max(0, fbuf.length - HOP_SIZE));
 
               let sumSq = 0;
               for (let i = 0; i < chunk.length; i++) {
@@ -209,7 +244,6 @@ export function usePitchDetectorFinal(
               const clearNote = (text: string) => {
                 stableFreqRef.current = 0;
                 candCountRef.current = 0;
-                recentFreqsRef.current = [];
                 if (canRender) {
                   lastUpdateRef.current = now;
                   setPitchData((p) => ({ ...p, note: "-", frequency: 0, confidence: 0, detectionMethod: text }));
@@ -235,7 +269,7 @@ export function usePitchDetectorFinal(
                 return;
               }
 
-              let { frequency: freq, clarity } = MPMProcessor.detectPitch(chunk, SAMPLE_RATE);
+              let { frequency: freq, clarity } = MPMProcessor.detectPitch(detChunk, SAMPLE_RATE);
               const rawFreq = freq;
               const lowClarity =
                 stabilize && (clarity < micMinClarity(sensitivity) || freq > MIC_MAX_FREQ);
@@ -262,8 +296,18 @@ export function usePitchDetectorFinal(
               if (stabilize) {
                 const stable = stableFreqRef.current;
                 // Dobra de oitava: no fim da corda o harmonico (2x) domina;
-                // com nota ja confirmada, trata como a mesma nota.
-                if (stable > 0 && Math.abs(centsBetween(freq, stable) - 1200) < SAME_NOTE_CENTS) {
+                // com nota ja confirmada, trata como a mesma nota. So vale se a
+                // nota estavel for uma corda da afinacao (senao um erro de
+                // oitava no ataque ficaria preso).
+                const strings = stringFreqsRef.current;
+                const stableIsString =
+                  strings.length === 0 ||
+                  strings.some((s) => s > 0 && Math.abs(centsBetween(stable, s)) < FOLD_STRING_CENTS);
+                if (
+                  stable > 0 &&
+                  stableIsString &&
+                  Math.abs(centsBetween(freq, stable) - 1200) < SAME_NOTE_CENTS
+                ) {
                   freq = freq / 2;
                 }
                 if (stable > 0 && Math.abs(centsBetween(freq, stable)) < SAME_NOTE_CENTS) {
@@ -292,15 +336,8 @@ export function usePitchDetectorFinal(
                   }
                   stableFreqRef.current = freq;
                   candCountRef.current = 0;
-                  recentFreqsRef.current = []; // nota nova: recomeca a suavizacao
                 }
                 lastAcceptRef.current = now;
-
-                // Ponteiro: mediana das ultimas leituras da mesma nota
-                const recent = recentFreqsRef.current;
-                recent.push(freq);
-                if (recent.length > SMOOTH_FRAMES) recent.shift();
-                freq = median(recent);
               }
 
               TestRecorder.logFrame(rms, rawFreq, clarity, "aceita", freq);
@@ -348,6 +385,8 @@ export function usePitchDetectorFinal(
       cancelled = true;
       stopRecording().catch(() => {});
       bufferRef.current = new Float32Array(0);
+      filteredRef.current = new Float32Array(0);
+      lpStateRef.current = { x1: 0, x2: 0, y1: 0, y2: 0 };
     };
   }, [isActive, refA4, noiseThreshold, stabilize, sensitivity]);
 

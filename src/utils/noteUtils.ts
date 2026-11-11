@@ -48,7 +48,7 @@ export const getFreqFromMidi = (midi: number, referenceA4: number = 440): number
 };
 
 /**
- * Afinações predefinidas para guitarra
+ * Afinações predefinidas (violão e guitarra)
  * Frequências em Hz das cordas abertas
  */
 export const TUNINGS = {

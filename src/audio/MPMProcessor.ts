@@ -1,5 +1,5 @@
 /**
- * MPMProcessor - McLeod Pitch Method para deteccao de pitch de guitarra
+ * MPMProcessor - McLeod Pitch Method para deteccao de pitch de instrumentos de corda
  * Usa a NSDF (Normalized Square Difference Function) e escolhe o PRIMEIRO pico
  * (menor lag) acima de um limiar relativo ao maior pico - isso evita o erro
  * classico de "cair" numa subharmonica (oitava abaixo), ponto fraco do YIN.
