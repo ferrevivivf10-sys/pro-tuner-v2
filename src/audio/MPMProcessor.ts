@@ -18,6 +18,10 @@
 const MIN_FREQ = 60;    // abaixo do E2 (~82Hz) com margem
 const MAX_FREQ = 1200;  // acima do E4 (~330Hz) e harmonicos
 const CLARITY_THRESHOLD = 0.90; // fracao do maior pico exigida pra aceitar um pico menor (mais agudo). 0.90 medido em gravacoes reais (aco e nylon)
+const LOOSE_THRESHOLD = 0.85;   // limiar frouxo do pico hibrido
+const HYBRID_MIN_FREQ = 125;    // o hibrido so vale para notas a partir daqui (Hz)
+const OCTAVE_CENTS = 50;        // tolerancia pra considerar "uma oitava"
+const SUBHARMONIC_MARGIN = 0.05; // quanto a NSDF em 2T/3T precisa superar a de T
 const MIN_CLARITY_ACCEPT = 0.3; // abaixo disso o sinal nao e periodico o suficiente, descarta
 const TARGET_RMS = 0.15;        // nivel alvo apos normalizacao
 const MIN_RMS = 0.0008;         // abaixo disso e silencio real, ignora
@@ -30,6 +34,7 @@ export interface PitchResult {
 }
 
 const NO_PITCH: PitchResult = { frequency: 0, clarity: 0 };
+const cents = (a: number, b: number) => 1200 * Math.log2(a / b);
 
 export class MPMProcessor {
   private static normalize(signal: Float32Array): Float32Array | null {
@@ -132,17 +137,65 @@ export class MPMProcessor {
 
     // Escolhe o PRIMEIRO pico (menor lag = maior frequencia) que seja "bom o
     // suficiente" perto do maior pico - evita cair na subharmonica (oitava abaixo).
-    const actualThreshold = maxValue * CLARITY_THRESHOLD;
-    let chosenLag = peakLags[0];
-    for (const lag of peakLags) {
-      if (cNsdf[lag] >= actualThreshold) {
-        chosenLag = lag;
-        break;
+    const pick = (fraction: number): number => {
+      const threshold = maxValue * fraction;
+      for (const lag of peakLags) {
+        if (cNsdf[lag] >= threshold) return lag;
+      }
+      return peakLags[0];
+    };
+
+    // ===== Estagio 2: refino em taxa cheia ao redor do lag escolhido =====
+    let result = this.refine(signal, pick(CLARITY_THRESHOLD), sampleRate);
+    if (result.frequency <= 0) return NO_PITCH;
+
+    // Pico hibrido: se o limiar mais frouxo aponta exatamente uma oitava acima
+    // de uma nota aguda, a leitura certa e a de cima (caso do Mi agudo).
+    const looseLag = pick(LOOSE_THRESHOLD);
+    if (result.frequency >= HYBRID_MIN_FREQ && looseLag !== pick(CLARITY_THRESHOLD)) {
+      const loose = this.refine(signal, looseLag, sampleRate);
+      if (loose.frequency > 0 && Math.abs(cents(loose.frequency, result.frequency) - 1200) < OCTAVE_CENTS) {
+        result = loose;
       }
     }
 
-    // ===== Estagio 2: refino em taxa cheia ao redor do lag escolhido =====
-    const center = chosenLag * DECIMATION;
+    // Sub-harmonico: se o sinal se repete bem melhor em 2x ou 3x o periodo,
+    // a nota real e f/2 ou f/3 (ataque das cordas graves, comum no nylon).
+    const f = result.frequency;
+    const base = this.nsdfAt(signal, sampleRate / f);
+    let bestK = 0;
+    let bestV = 0;
+    for (const k of [2, 3]) {
+      const lag = (k * sampleRate) / f;
+      if (f / k < MIN_FREQ || lag > signal.length / 2) continue;
+      const v = this.nsdfAt(signal, lag);
+      if (v - base >= SUBHARMONIC_MARGIN && v > bestV) {
+        bestK = k;
+        bestV = v;
+      }
+    }
+    if (bestK > 0) return { frequency: f / bestK, clarity: Math.min(1, bestV) };
+
+    return result;
+  }
+
+  // NSDF num unico lag (arredondado), na taxa cheia.
+  private static nsdfAt(signal: Float32Array, lag: number): number {
+    const tau = Math.round(lag);
+    let acf = 0;
+    let energy = 0;
+    for (let i = 0; i + tau < signal.length; i++) {
+      const a = signal[i];
+      const b = signal[i + tau];
+      acf += a * b;
+      energy += a * a + b * b;
+    }
+    return energy > 0 ? (2 * acf) / energy : 0;
+  }
+
+  // Refino: NSDF na taxa cheia numa janela estreita + interpolacao parabolica.
+  private static refine(signal: Float32Array, coarseLag: number, sampleRate: number): PitchResult {
+    const center = coarseLag * DECIMATION;
     const half = Math.floor(signal.length / 2);
     // +1 de folga de cada lado pra interpolacao ter vizinhos validos
     const fLo = Math.max(2, center - REFINE_SPAN - 1);

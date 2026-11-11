@@ -77,3 +77,26 @@ test("nota com ruido moderado continua correta", () => {
   const { frequency } = MPMProcessor.detectPitch(x, SR);
   assert.ok(Math.abs(cents(frequency, 146.83)) < 5, `${frequency.toFixed(2)} Hz`);
 });
+
+// Trechos reais (2048 amostras) gravados pelo modo de teste do app.
+import { readFileSync } from "node:fs";
+
+function fixture(name) {
+  const { pcm16 } = JSON.parse(readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), "utf8"));
+  const buf = Buffer.from(pcm16, "base64");
+  const x = new Float32Array(buf.length / 2);
+  for (let i = 0; i < x.length; i++) x[i] = buf.readInt16LE(i * 2) / 32768;
+  return x;
+}
+
+test("Mi agudo real nao cai uma oitava abaixo (pico hibrido)", () => {
+  const { frequency } = MPMProcessor.detectPitch(fixture("mi-agudo-aco"), SR);
+  assert.ok(Math.abs(cents(frequency, STANDARD.E4)) < 50, `${frequency.toFixed(2)} Hz`);
+});
+
+test("ataque real do La e do Mi grave no nylon nao sobe de oitava (sub-harmonico)", () => {
+  const la = MPMProcessor.detectPitch(fixture("la-ataque-nylon"), SR).frequency;
+  assert.ok(Math.abs(cents(la, STANDARD.A2)) < 50, `La: ${la.toFixed(2)} Hz`);
+  const mi = MPMProcessor.detectPitch(fixture("mi-grave-ataque-nylon"), SR).frequency;
+  assert.ok(Math.abs(cents(mi, STANDARD.E2)) < 50, `Mi grave: ${mi.toFixed(2)} Hz`);
+});
