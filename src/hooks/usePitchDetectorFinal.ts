@@ -3,6 +3,7 @@ import { Platform, PermissionsAndroid } from "react-native";
 import { decode } from "base-64";
 import { useAudioRecorder } from "@siteed/audio-studio";
 import { MPMProcessor } from "../audio/MPMProcessor";
+import { TestRecorder } from "../audio/TestRecorder";
 import { NOTES } from "../utils/noteUtils";
 
 export interface PitchData {
@@ -165,6 +166,7 @@ export function usePitchDetectorFinal(
 
             const samples = base64ToFloat32(event.data);
             lastChunkLenRef.current = samples.length;
+            TestRecorder.addSamples(samples); // DIAGNOSTICO: so grava se o teste estiver ligado
 
             // Concatena mantendo so as ultimas MAX_BUFFER amostras
             const prev = bufferRef.current;
@@ -215,6 +217,7 @@ export function usePitchDetectorFinal(
               };
 
               if (rms < noiseThreshold) {
+                TestRecorder.logFrame(rms, 0, 0, "silencio", 0);
                 if (stabilize) {
                   if (now - lastAcceptRef.current >= HOLD_MS) clearNote(diag(""));
                   return;
@@ -233,9 +236,11 @@ export function usePitchDetectorFinal(
               }
 
               let { frequency: freq, clarity } = MPMProcessor.detectPitch(chunk, SAMPLE_RATE);
+              const rawFreq = freq;
               const lowClarity =
                 stabilize && (clarity < micMinClarity(sensitivity) || freq > MIC_MAX_FREQ);
               if (freq <= 0 || lowClarity) {
+                TestRecorder.logFrame(rms, rawFreq, clarity, "sem_nota", 0);
                 if (stabilize && now - lastAcceptRef.current >= HOLD_SOUND_MS) {
                   clearNote(diag("SEM NOTA · ", clarity));
                   return;
@@ -275,6 +280,7 @@ export function usePitchDetectorFinal(
                   const need =
                     stable > 0 && isOctaveJump(freq, stable) ? OCTAVE_CONFIRM_FRAMES : CONFIRM_FRAMES;
                   if (candCountRef.current < need) {
+                    TestRecorder.logFrame(rms, rawFreq, clarity, "segurando", 0);
                     if (canRender) {
                       lastUpdateRef.current = now;
                       setPitchData((p) => ({
@@ -297,6 +303,7 @@ export function usePitchDetectorFinal(
                 freq = median(recent);
               }
 
+              TestRecorder.logFrame(rms, rawFreq, clarity, "aceita", freq);
               const info = getNoteInfo(freq, refA4);
               if (!info) return;
 

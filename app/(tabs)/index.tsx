@@ -1,7 +1,7 @@
 /**
  * TunerScreen — Tela principal do Pro Tuner (tema OLED puro)
  */
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -21,6 +21,8 @@ import { DEFAULT_RING_STYLE } from "@/src/components/TunerDial";
 import { usePitchDetectorFinal } from "@/src/hooks/usePitchDetectorFinal";
 import { SettingsManager, type TunerSettings } from "@/src/utils/SettingsManager";
 import { TUNING_LABELS, type TuningName } from "@/src/utils/noteUtils";
+import Constants from "expo-constants";
+import { TestRecorder, TEST_MAX_SECONDS } from "@/src/audio/TestRecorder";
 
 const KEEP_AWAKE_TAG = "pro-tuner";
 const TUNING_OPTIONS = ["Standard", "DropD", "HalfStepDown", "FullStepDown", "OpenG"] as const;
@@ -38,6 +40,9 @@ export default function TunerScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isActive, setIsActive] = useState(false);
   const [tuningModalVisible, setTuningModalVisible] = useState(false);
+  const [testSeconds, setTestSeconds] = useState<number | null>(null);
+  const [testSaving, setTestSaving] = useState(false);
+  const testTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [appInForeground, setAppInForeground] = useState(AppState.currentState === "active");
 
   // Libera o microfone quando o app sai da tela
@@ -102,6 +107,48 @@ export default function TunerScreen() {
 
   const toggleTuner = useCallback(() => setIsActive((prev) => !prev), []);
 
+  // DIAGNOSTICO: salva audio + registro e avisa o resultado
+  const finishTest = useCallback(async () => {
+    if (testTimerRef.current) clearInterval(testTimerRef.current);
+    testTimerRef.current = null;
+    TestRecorder.stop();
+    setTestSeconds(null);
+    setTestSaving(true);
+    try {
+      const ok = await TestRecorder.save();
+      Alert.alert(ok ? "Teste salvo" : "Teste não salvo", ok
+        ? "Os arquivos .wav e .csv estão na pasta escolhida."
+        : "Nenhuma pasta foi escolhida.");
+    } catch (e) {
+      Alert.alert("Erro ao salvar", e instanceof Error ? e.message : String(e));
+    } finally {
+      setTestSaving(false);
+    }
+  }, []);
+
+  const toggleTest = useCallback(() => {
+    if (TestRecorder.isRecording() || testTimerRef.current) {
+      finishTest();
+      return;
+    }
+    if (!isActive) setIsActive(true);
+    TestRecorder.start(
+      "versao=" + (Constants.expoConfig?.version ?? "?") +
+      " modo=" + (isCable ? "cabo" : "mic") +
+      " sensibilidade=" + sensitivity +
+      " a4=" + (settings?.refA4 ?? 440) +
+      " data=" + new Date().toISOString()
+    );
+    setTestSeconds(0);
+    testTimerRef.current = setInterval(() => {
+      if (!TestRecorder.isRecording()) {
+        finishTest(); // chegou no limite de tempo
+        return;
+      }
+      setTestSeconds(TestRecorder.seconds());
+    }, 500);
+  }, [isActive, isCable, sensitivity, settings, finishTest]);
+
   const selectTuning = useCallback(async (tuning: string) => {
     try {
       await SettingsManager.setTuning(tuning as any);
@@ -150,6 +197,21 @@ export default function TunerScreen() {
         </View>
 
         <Text style={styles.methodText}>{pitchData.detectionMethod}</Text>
+
+        {/* DIAGNOSTICO: grava audio + registro de leituras (sai antes da main) */}
+        <TouchableOpacity
+          style={[styles.testBtn, testSeconds !== null && styles.testBtnOn]}
+          onPress={toggleTest}
+          disabled={testSaving}
+        >
+          <Text style={[styles.testBtnText, testSeconds !== null && styles.testBtnTextOn]}>
+            {testSaving
+              ? "SALVANDO..."
+              : testSeconds !== null
+                ? "■ PARAR E SALVAR  " + Math.floor(testSeconds) + "s / " + TEST_MAX_SECONDS + "s"
+                : "● GRAVAR TESTE"}
+          </Text>
+        </TouchableOpacity>
 
         {/* Linha divisória fina antes da área de controle */}
         <View style={styles.divider} />
@@ -214,6 +276,10 @@ const styles = StyleSheet.create({
   statusText: { color: "#888", fontSize: 12, fontWeight: "600", letterSpacing: 0.5 },
   calibText: { color: "#555", fontSize: 11, letterSpacing: 0.5 },
   displayArea: { flex: 1, justifyContent: "center", alignItems: "center" },
+  testBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 14, borderWidth: 1, borderColor: "#333", marginBottom: 12 },
+  testBtnOn: { borderColor: "#FF5252" },
+  testBtnText: { color: "#777", fontSize: 11, fontWeight: "700", letterSpacing: 1 },
+  testBtnTextOn: { color: "#FF5252" },
   methodText: { color: "#444", fontSize: 10, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 16, marginTop: 8 },
   divider: { width: "60%", height: 1, backgroundColor: "#1A1A1A", marginBottom: 20 },
   toggleBtn: { backgroundColor: "#0A0A0A", paddingHorizontal: 48, paddingVertical: 14, borderRadius: 32, borderWidth: 1.5, borderColor: "#333" },
