@@ -42,6 +42,20 @@
 - [x] Dobra de oitava: harmônico 2x no fim da corda conta como a mesma nota
 - Resultado medido em ambiente com ruído: leituras ruins de 20,7% para 2,1%
 
+## Próximo build (aguardando liberação)
+
+Validado offline com as gravações do modo de teste (aço, nylon, cabo).
+
+- [ ] Pico híbrido (0.90, volta pra 0.85 se der uma oitava acima e ≥ 125 Hz) + teste do Mi agudo
+- [ ] Dobra de oitava só quando a nota estável é uma corda da afinação
+- [ ] Correção de sub-harmônico: usa f/2 ou f/3 se a NSDF em 2T/3T for ≥ 0.05 maior que em T (ataque do nylon)
+- [ ] Display segura a nota 300 ms (era 600) e remove a mediana do hook
+- [ ] Mic para na aba Ajustes
+- [ ] Modo de teste vira opção em Ajustes (com escolha de fonte de áudio sem processamento)
+- [ ] Numeração das cordas (Mi grave = 6ª) e "instrumento" no lugar de "guitarra"
+- [ ] Atualizar lista de entradas ao abrir o afinador e ao voltar pro app (bug do cabo)
+- [ ] Filtro passa-baixa 1500 Hz: **fora do padrão** — só como opção no modo de teste (pode mostrar nota em pausas com ruído)
+
 ## Pendente
 
 - [ ] **Lembrete:** o próximo build já leva os testes automatizados (commit `4378c69`) — conferir no log do Actions o passo "Testes" passando (7 testes)
