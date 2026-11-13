@@ -23,6 +23,7 @@ import { SettingsManager, type TunerSettings } from "@/src/utils/SettingsManager
 import { TUNINGS, TUNING_LABELS, type TuningName } from "@/src/utils/noteUtils";
 import Constants from "expo-constants";
 import { TestRecorder, TEST_MAX_SECONDS } from "@/src/audio/TestRecorder";
+import { hasCable, createDevicePoller } from "@/src/audio/cableMode";
 
 const KEEP_AWAKE_TAG = "pro-tuner";
 const TUNING_OPTIONS = ["Standard", "DropD", "HalfStepDown", "FullStepDown", "OpenG"] as const;
@@ -30,7 +31,6 @@ const TUNING_OPTIONS = ["Standard", "DropD", "HalfStepDown", "FullStepDown", "Op
 // Modo cabo: entrada USB/fone plugada. Sem ruido ambiente, entao usa
 // limites fixos medidos no violao (chiado ~0.0013 RMS / clareza <= 0.36;
 // nota real >= 0.014 RMS / clareza >= 0.82).
-const CABLE_TYPES = ["usb", "wired_headset"];
 const MIC_NOISE_THRESHOLD = 0.0025; // silencio do mic ~0.0003; nota fraca >= 0.004
 const CABLE_NOISE_THRESHOLD = 0.003;
 const CABLE_SENSITIVITY = 0.5; // equivale a clareza minima de 0.6
@@ -73,20 +73,11 @@ export default function TunerScreen() {
   // o detector reinicia a captura sozinho.
   const refreshRef = useRef(refreshDevices);
   refreshRef.current = refreshDevices;
-  const refreshingRef = useRef(false);
   useEffect(() => {
     if (!isActive || !appInForeground || !tabFocused) return;
-    const id = setInterval(() => {
-      if (refreshingRef.current) return;
-      refreshingRef.current = true;
-      refreshRef
-        .current()
-        .catch(() => {})
-        .finally(() => {
-          refreshingRef.current = false;
-        });
-    }, DEVICE_REFRESH_MS);
-    return () => clearInterval(id);
+    const poller = createDevicePoller(() => refreshRef.current(), DEVICE_REFRESH_MS);
+    poller.start();
+    return () => poller.stop();
   }, [isActive, appInForeground, tabFocused]);
 
   const loadSettings = useCallback(async () => {
@@ -118,7 +109,7 @@ export default function TunerScreen() {
     }, [loadSettings])
   );
 
-  const isCable = devices.some((d) => CABLE_TYPES.includes(d.type) && d.isAvailable);
+  const isCable = hasCable(devices);
   const sensitivity = isCable ? CABLE_SENSITIVITY : settings?.sensitivity ?? 0.7;
 
   const testMode = settings?.testMode ?? false;
