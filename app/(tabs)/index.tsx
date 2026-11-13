@@ -34,6 +34,7 @@ const CABLE_TYPES = ["usb", "wired_headset"];
 const MIC_NOISE_THRESHOLD = 0.0025; // silencio do mic ~0.0003; nota fraca >= 0.004
 const CABLE_NOISE_THRESHOLD = 0.003;
 const CABLE_SENSITIVITY = 0.5; // equivale a clareza minima de 0.6
+const DEVICE_REFRESH_MS = 2500; // intervalo de releitura das entradas
 
 export default function TunerScreen() {
   const [settings, setSettings] = useState<TunerSettings | null>(null);
@@ -66,6 +67,27 @@ export default function TunerScreen() {
       return () => setTabFocused(false);
     }, [refreshDevices])
   );
+
+  // Com o afinador ativo, rele as entradas a cada 2,5 s: o aviso de cabo
+  // plugado com o app aberto nem sempre chega. Quando o modo muda (mic/cabo),
+  // o detector reinicia a captura sozinho.
+  const refreshRef = useRef(refreshDevices);
+  refreshRef.current = refreshDevices;
+  const refreshingRef = useRef(false);
+  useEffect(() => {
+    if (!isActive || !appInForeground || !tabFocused) return;
+    const id = setInterval(() => {
+      if (refreshingRef.current) return;
+      refreshingRef.current = true;
+      refreshRef
+        .current()
+        .catch(() => {})
+        .finally(() => {
+          refreshingRef.current = false;
+        });
+    }, DEVICE_REFRESH_MS);
+    return () => clearInterval(id);
+  }, [isActive, appInForeground, tabFocused]);
 
   const loadSettings = useCallback(async () => {
     const loaded = await SettingsManager.loadSettings();
