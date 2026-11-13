@@ -56,6 +56,7 @@ Validado offline com as gravações do modo de teste (aço, nylon, cabo).
 - [x] Numeração das cordas (6ª = mais grave) e "instrumento" no lugar de "guitarra"
 - [x] Relê a lista de entradas ao abrir o afinador e ao voltar pro app (bug do cabo)
 - [x] Relê as entradas a cada 2,5 s com o afinador ativo; a captura reinicia sozinha ao plugar/desplugar o cabo (aguardando teste no celular)
+- [x] Conferência em taxa cheia dos picos agudos: ataque do Si não pisca "Mi grave" e o do Mizinho não vira "Lá" (f/3) + teste com áudio real
 - [ ] Fonte de áudio sem processamento: só existe na `@siteed/audio-studio` 4.x (beta) — fica pra depois
 
 ## Pendente

@@ -100,3 +100,10 @@ test("ataque real do La e do Mi grave no nylon nao sobe de oitava (sub-harmonico
   const mi = MPMProcessor.detectPitch(fixture("mi-grave-ataque-nylon"), SR).frequency;
   assert.ok(Math.abs(cents(mi, STANDARD.E2)) < 50, `Mi grave: ${mi.toFixed(2)} Hz`);
 });
+
+test("ataque real do Si e do Mizinho nao cai para f/3 (conferencia em taxa cheia)", () => {
+  const si = MPMProcessor.detectPitch(fixture("si-ataque-aco"), SR).frequency;
+  assert.ok(Math.abs(cents(si, STANDARD.B3)) < 50, `Si: ${si.toFixed(2)} Hz`);
+  const mi = MPMProcessor.detectPitch(fixture("mizinho-ataque-aco"), SR).frequency;
+  assert.ok(Math.abs(cents(mi, STANDARD.E4)) < 50, `Mizinho: ${mi.toFixed(2)} Hz`);
+});

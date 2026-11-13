@@ -22,6 +22,7 @@ const LOOSE_THRESHOLD = 0.85;   // limiar frouxo do pico hibrido
 const HYBRID_MIN_FREQ = 125;    // o hibrido so vale para notas a partir daqui (Hz)
 const OCTAVE_CENTS = 50;        // tolerancia pra considerar "uma oitava"
 const SUBHARMONIC_MARGIN = 0.05; // quanto a NSDF em 2T/3T precisa superar a de T
+const FULL_RATE_FRACTION = 0.95; // conferencia em taxa cheia: fracao do maior pico exigida
 const MIN_CLARITY_ACCEPT = 0.3; // abaixo disso o sinal nao e periodico o suficiente, descarta
 const TARGET_RMS = 0.15;        // nivel alvo apos normalizacao
 const MIN_RMS = 0.0008;         // abaixo disso e silencio real, ignora
@@ -146,7 +147,28 @@ export class MPMProcessor {
     };
 
     // ===== Estagio 2: refino em taxa cheia ao redor do lag escolhido =====
-    let result = this.refine(signal, pick(CLARITY_THRESHOLD), sampleRate);
+    const strictLag = pick(CLARITY_THRESHOLD);
+    let result = this.refine(signal, strictLag, sampleRate);
+
+    // Conferencia em taxa cheia: a decimacao enfraquece os picos agudos. No
+    // ataque, um pico agudo pode ficar logo abaixo do limiar no estagio
+    // grosseiro e o detector cai em f/3 (Si lido como Mi grave, Mizinho como
+    // La). Picos acima do limiar frouxo sao conferidos na taxa cheia.
+    const candidates = peakLags.filter(
+      (lag) => lag < strictLag && cNsdf[lag] >= maxValue * LOOSE_THRESHOLD
+    );
+    if (candidates.length > 0) {
+      let maxLag = peakLags[0];
+      for (const lag of peakLags) if (cNsdf[lag] > cNsdf[maxLag]) maxLag = lag;
+      const maxFull = this.refine(signal, maxLag, sampleRate).clarity;
+      for (const lag of candidates) {
+        const r = this.refine(signal, lag, sampleRate);
+        if (r.frequency > 0 && r.clarity >= maxFull * FULL_RATE_FRACTION) {
+          result = r;
+          break;
+        }
+      }
+    }
     if (result.frequency <= 0) return NO_PITCH;
 
     // Pico hibrido: se o limiar mais frouxo aponta exatamente uma oitava acima
