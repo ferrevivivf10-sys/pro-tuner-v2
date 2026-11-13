@@ -56,6 +56,9 @@ jobs:
         run: npm install
 
       # Para o build se o detector de notas quebrar
+      - name: Checar tipos
+        run: npm run check
+
       - name: Testes
         run: npm test
 
