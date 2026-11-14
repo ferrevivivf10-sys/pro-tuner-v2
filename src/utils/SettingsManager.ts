@@ -8,6 +8,10 @@ import {
   type RingStyleName,
 } from "../components/TunerDial";
 
+// Fonte de audio do microfone no Android (modo de teste)
+export type MicSource = "mic" | "voiceRecognition" | "unprocessed";
+const MIC_SOURCES: MicSource[] = ["mic", "voiceRecognition", "unprocessed"];
+
 export interface TunerSettings {
   refA4: number;
   selectedTuning: string;
@@ -15,6 +19,7 @@ export interface TunerSettings {
   ringStyle: RingStyleName;
   testMode: boolean; // mostra o botao de gravar teste e o texto de diagnostico
   testLowpass: boolean; // modo de teste: filtro passa-baixa de 1500 Hz no microfone
+  testMicSource: MicSource; // modo de teste: fonte de audio do microfone
 }
 
 const STORAGE_KEY = "@pro_tuner_settings";
@@ -26,6 +31,7 @@ const DEFAULT_SETTINGS: TunerSettings = {
   ringStyle: DEFAULT_RING_STYLE,
   testMode: false,
   testLowpass: false,
+  testMicSource: "mic",
 };
 
 export class SettingsManager {
@@ -60,6 +66,9 @@ export class SettingsManager {
             : DEFAULT_SETTINGS.ringStyle,
         testMode: parsed.testMode === true,
         testLowpass: parsed.testLowpass === true,
+        testMicSource: MIC_SOURCES.includes(parsed.testMicSource)
+          ? parsed.testMicSource
+          : "mic",
       };
     } catch (error) {
       console.error("SettingsManager.loadSettings error:", error);
@@ -106,5 +115,9 @@ export class SettingsManager {
 
   static async setTestLowpass(value: boolean): Promise<void> {
     await this.updateField("testLowpass", value);
+  }
+
+  static async setTestMicSource(value: MicSource): Promise<void> {
+    await this.updateField("testMicSource", value);
   }
 }

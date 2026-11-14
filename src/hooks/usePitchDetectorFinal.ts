@@ -11,6 +11,7 @@ import {
   HOLD_SOUND_MS,
 } from "../audio/stability";
 import { NOTES } from "../utils/noteUtils";
+import type { MicSource } from "../utils/SettingsManager";
 
 export interface PitchData {
   note: string;
@@ -110,6 +111,11 @@ export function usePitchDetectorFinal(
   stabilize: boolean = false,
   stringFreqs: number[] = [], // cordas da afinacao (Hz, ja com o A4 escolhido)
   lowpass: boolean = false, // modo de teste: filtra o audio antes do detector
+  // Fonte de audio no Android. "mic" e o padrao (o fabricante pode aplicar
+  // supressao de ruido e ganho automatico); "voiceRecognition" vem sem esses
+  // filtros na maioria dos aparelhos; "unprocessed" e o sinal cru (cai para
+  // "mic" se o aparelho nao suportar).
+  audioSource: MicSource = "mic",
 ): PitchData {
   const [pitchData, setPitchData] = useState<PitchData>(INITIAL_PITCH_DATA);
 
@@ -117,6 +123,7 @@ export function usePitchDetectorFinal(
   const bufferRef = useRef<Float32Array>(new Float32Array(0));
   const lastUpdateRef = useRef(0);
   const lastChunkLenRef = useRef(0); // DIAGNOSTICO: amostras por callback
+  const sourceTagRef = useRef(""); // DIAGNOSTICO: fonte aberta de fato
   const stabilizerRef = useRef(createStabilizer()); // modo microfone
   const stringFreqsRef = useRef(stringFreqs);
   const lowpassRef = useRef(lowpass);
@@ -167,7 +174,8 @@ export function usePitchDetectorFinal(
           return;
         }
 
-        await recorderRef.current.startRecording({
+        const result = await recorderRef.current.startRecording({
+          android: { audioSource },
           sampleRate: SAMPLE_RATE,
           channels: 1,
           encoding: "pcm_16bit",
@@ -240,7 +248,8 @@ export function usePitchDetectorFinal(
                 rms.toFixed(4) +
                 (clar !== undefined ? " · clar " + clar.toFixed(2) : "") +
                 " · n=" +
-                lastChunkLenRef.current;
+                lastChunkLenRef.current +
+                sourceTagRef.current;
 
               // Limpa a nota exibida (silencio por HOLD_MS ou ruido por HOLD_SOUND_MS)
               const clearNote = (text: string) => {
@@ -274,7 +283,8 @@ export function usePitchDetectorFinal(
                       "RMS " +
                       rms.toFixed(5) +
                       " · n=" +
-                      lastChunkLenRef.current,
+                      lastChunkLenRef.current +
+                      sourceTagRef.current,
                   }));
                 }
                 return;
@@ -307,7 +317,8 @@ export function usePitchDetectorFinal(
                       " · clar " +
                       clarity.toFixed(2) +
                       " · n=" +
-                      lastChunkLenRef.current,
+                      lastChunkLenRef.current +
+                      sourceTagRef.current,
                   }));
                 }
                 return;
@@ -357,12 +368,26 @@ export function usePitchDetectorFinal(
                     " · clar " +
                     clarity.toFixed(2) +
                     " · n=" +
-                    lastChunkLenRef.current,
+                    lastChunkLenRef.current +
+                    sourceTagRef.current,
                 });
               }
             }
           },
         });
+        // O Android pode nao honrar o pedido (ex.: "unprocessed" sem suporte):
+        // o resultado diz a fonte que abriu de fato
+        const used = result?.androidAudioSource ?? "mic";
+        TestRecorder.setSource(used);
+        const TAG: Record<string, string> = {
+          mic: "",
+          voiceRecognition: " · voz",
+          unprocessed: " · cru",
+        };
+        sourceTagRef.current =
+          used === audioSource
+            ? TAG[used]
+            : " · " + audioSource + " indisponivel";
       } catch (error) {
         console.error("Recording error:", error);
         const msg = error instanceof Error ? error.message : String(error);
@@ -387,7 +412,7 @@ export function usePitchDetectorFinal(
       filteredRef.current = new Float32Array(0);
       lpStateRef.current = { x1: 0, x2: 0, y1: 0, y2: 0 };
     };
-  }, [isActive, refA4, noiseThreshold, stabilize, sensitivity]);
+  }, [isActive, refA4, noiseThreshold, stabilize, sensitivity, audioSource]);
 
   useEffect(() => {
     if (Platform.OS !== "web") return;
@@ -395,12 +420,27 @@ export function usePitchDetectorFinal(
     let audioCtx: AudioContext | null = null;
     let stream: MediaStream | null = null;
     let animationFrame = 0;
+    // A captura pode ser encerrada enquanto ainda espera a permissao; sem
+    // isto, ela continuava rodando escondida e misturava as leituras
+    let cancelled = false;
 
     const start = async () => {
       if (!isActive) return;
 
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Sem os filtros de voz do navegador: eles cortam o fim da nota e
+        // mexem no volume sozinhos
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+          },
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
         audioCtx = new AudioContext();
         const analyser = audioCtx.createAnalyser();
         analyser.fftSize = BUFFER_SIZE;
@@ -408,7 +448,7 @@ export function usePitchDetectorFinal(
         const buffer = new Float32Array(analyser.fftSize);
 
         const detect = () => {
-          if (!isActiveRef.current) return;
+          if (cancelled || !isActiveRef.current) return;
           analyser.getFloatTimeDomainData(buffer);
 
           let sumSq = 0;
@@ -451,6 +491,7 @@ export function usePitchDetectorFinal(
     start();
 
     return () => {
+      cancelled = true;
       cancelAnimationFrame(animationFrame);
       stream?.getTracks().forEach((t) => t.stop());
       audioCtx?.close();

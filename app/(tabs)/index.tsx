@@ -28,6 +28,7 @@ import { DEFAULT_RING_STYLE } from "@/src/components/TunerDial";
 import { usePitchDetectorFinal } from "@/src/hooks/usePitchDetectorFinal";
 import {
   SettingsManager,
+  type MicSource,
   type TunerSettings,
 } from "@/src/utils/SettingsManager";
 import { TUNINGS, TUNING_LABELS, type TuningName } from "@/src/utils/noteUtils";
@@ -140,6 +141,9 @@ export default function TunerScreen() {
 
   const testMode = settings?.testMode ?? false;
   const testLowpass = testMode && !isCable && (settings?.testLowpass ?? false);
+  // Fonte do microfone: so muda no modo de teste e sem cabo
+  const micSource: MicSource =
+    testMode && !isCable ? (settings?.testMicSource ?? "mic") : "mic";
 
   // Cordas da afinacao escolhida, corrigidas pelo A4
   const refA4 = settings?.refA4 ?? 440;
@@ -160,6 +164,7 @@ export default function TunerScreen() {
     !isCable, // estabilidade so no microfone
     stringFreqs,
     testLowpass,
+    micSource,
   );
 
   // Tela sempre ligada enquanto o afinador esta ativo e nesta aba
@@ -212,6 +217,8 @@ export default function TunerScreen() {
         sensitivity +
         " filtro=" +
         (testLowpass ? "1500" : "nao") +
+        " fonte_pedida=" +
+        micSource +
         " a4=" +
         (settings?.refA4 ?? 440) +
         " data=" +
@@ -225,7 +232,15 @@ export default function TunerScreen() {
       }
       setTestSeconds(TestRecorder.seconds());
     }, 500);
-  }, [isActive, isCable, sensitivity, settings, testLowpass, finishTest]);
+  }, [
+    isActive,
+    isCable,
+    sensitivity,
+    settings,
+    testLowpass,
+    micSource,
+    finishTest,
+  ]);
 
   const selectTuning = useCallback(async (tuning: string) => {
     try {

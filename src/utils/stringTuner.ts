@@ -11,6 +11,9 @@ export const CENTS_SMOOTH_SIZE = 5; // media movel das ultimas N leituras de cen
 export const STRING_GUARD_CENTS = 250; // ~metade da distancia entre cordas; acima disso o sinal esta longe de qualquer corda
 
 export const IN_TUNE_CENTS = 5; // |cents| < isso => afinado
+// Depois de afinado, so sai acima disto: a folga evita o "AFINADO" piscar
+// quando a leitura oscila em volta de 5 cents
+export const IN_TUNE_EXIT_CENTS = 7;
 
 // Limiar de clareza (0-1) do MPM para considerar que ha uma NOTA real, e nao
 // ruido ambiente. E derivado da "sensibilidade" (0-1) escolhida nas Config.:
@@ -127,14 +130,24 @@ export function pickTargetString(
   return best != null && bestDist <= STRING_GUARD_CENTS ? best : null;
 }
 
-/** Media movel das ultimas `size` leituras de cents. */
+export function median(values: number[]): number {
+  const s = [...values].sort((a, b) => a - b);
+  const mid = s.length >> 1;
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+/**
+ * Mediana das ultimas `size` leituras de cents. A mediana ignora leituras
+ * isoladas tortas (ex.: o fim fraco da nota), que puxariam uma media.
+ * Medido numa gravacao real: o maior salto do ponteiro caiu de 9,8 para 5,4 cents.
+ */
 export function createCentsSmoother(size: number = CENTS_SMOOTH_SIZE) {
   let buf: number[] = [];
   return {
     push(cents: number): number {
       buf.push(cents);
       if (buf.length > size) buf.shift();
-      return buf.reduce((a, b) => a + b, 0) / buf.length;
+      return median(buf);
     },
     reset() {
       buf = [];
@@ -144,8 +157,13 @@ export function createCentsSmoother(size: number = CENTS_SMOOTH_SIZE) {
 
 export type TuneAction = "AFINADO" | "AFROUXAR" | "APERTAR";
 
+/** Afinado com folga: entra abaixo de IN_TUNE_CENTS, sai acima de IN_TUNE_EXIT_CENTS. */
+export function isInTune(cents: number, wasInTune: boolean): boolean {
+  return Math.abs(cents) < (wasInTune ? IN_TUNE_EXIT_CENTS : IN_TUNE_CENTS);
+}
+
 /** Agudo (cents > 0) => afrouxar; grave => apertar. */
-export function tuneAction(cents: number): TuneAction {
-  if (Math.abs(cents) < IN_TUNE_CENTS) return "AFINADO";
+export function tuneAction(cents: number, wasInTune = false): TuneAction {
+  if (isInTune(cents, wasInTune)) return "AFINADO";
   return cents > 0 ? "AFROUXAR" : "APERTAR";
 }

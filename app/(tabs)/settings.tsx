@@ -16,7 +16,8 @@ import Constants from "expo-constants";
 import { router } from "expo-router";
 import { ScreenContainer } from "@/components/screen-container";
 import { TUNINGS, TUNING_LABELS, type TuningName } from "@/src/utils/noteUtils";
-import { SettingsManager } from "@/src/utils/SettingsManager";
+import { SettingsManager, type MicSource } from "@/src/utils/SettingsManager";
+
 import {
   TunerDial,
   RING_STYLES,
@@ -27,6 +28,12 @@ import {
 } from "@/src/components/TunerDial";
 
 const CALIBRATIONS = [432, 438, 440, 442, 444];
+
+const MIC_SOURCE_OPTIONS: { value: MicSource; label: string }[] = [
+  { value: "mic", label: "Padrão" },
+  { value: "voiceRecognition", label: "Voz" },
+  { value: "unprocessed", label: "Cru" },
+];
 
 const SENSITIVITY_OPTIONS = [
   { label: "Baixa", value: 0.4 },
@@ -41,6 +48,7 @@ export default function SettingsScreen() {
   const [ringStyle, setRingStyle] = useState<RingStyleName>(DEFAULT_RING_STYLE);
   const [testMode, setTestMode] = useState(false);
   const [testLowpass, setTestLowpass] = useState(false);
+  const [testMicSource, setTestMicSource] = useState<MicSource>("mic");
 
   // Carregar configurações salvas
   useEffect(() => {
@@ -53,6 +61,7 @@ export default function SettingsScreen() {
         setRingStyle(settings.ringStyle);
         setTestMode(settings.testMode);
         setTestLowpass(settings.testLowpass);
+        setTestMicSource(settings.testMicSource);
       } catch (error) {
         console.error("Erro ao carregar configurações:", error);
       }
@@ -124,6 +133,15 @@ export default function SettingsScreen() {
       setTestLowpass(value);
     } catch (error) {
       console.error("Erro ao salvar filtro de teste:", error);
+    }
+  };
+
+  const saveTestMicSource = async (value: MicSource) => {
+    try {
+      await SettingsManager.setTestMicSource(value);
+      setTestMicSource(value);
+    } catch (error) {
+      console.error("Erro ao salvar fonte do microfone:", error);
     }
   };
 
@@ -411,6 +429,41 @@ export default function SettingsScreen() {
                         ]}
                       >
                         {value ? "Ligado" : "Desligado"}
+                      </Text>
+                      {isActive && <Text style={styles.checkmark}>✓</Text>}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={[styles.sectionDescription, styles.subOption]}>
+                Fonte do microfone, só sem cabo. Padrão: a de sempre (o celular
+                pode aplicar filtros de voz). Voz: sem supressão de ruído nem
+                ganho automático na maioria dos aparelhos. Cru: sinal sem nenhum
+                processamento, se o celular suportar. Os dados técnicos mostram
+                a fonte usada.
+              </Text>
+              <View style={styles.optionsContainer}>
+                {MIC_SOURCE_OPTIONS.map((opt) => {
+                  const isActive = testMicSource === opt.value;
+                  return (
+                    <TouchableOpacity
+                      key={opt.value}
+                      style={[
+                        styles.optionButton,
+                        isActive && styles.optionButtonActive,
+                      ]}
+                      onPress={() => saveTestMicSource(opt.value)}
+                      accessibilityRole="radio"
+                      accessibilityLabel={"Fonte do microfone " + opt.label}
+                      accessibilityState={{ checked: isActive }}
+                    >
+                      <Text
+                        style={[
+                          styles.optionText,
+                          isActive && styles.optionTextActive,
+                        ]}
+                      >
+                        {opt.label}
                       </Text>
                       {isActive && <Text style={styles.checkmark}>✓</Text>}
                     </TouchableOpacity>

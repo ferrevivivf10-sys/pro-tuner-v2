@@ -46,9 +46,14 @@ import {
   pickTargetString,
   spokenStringName,
   stringFreq,
-  tuneAction,
+  isInTune,
   TUNING_STRING_NAMES,
 } from "../utils/stringTuner";
+import {
+  createTuningProgress,
+  type ProgressReading,
+} from "../utils/tuningProgress";
+import * as Haptics from "expo-haptics";
 import Svg, {
   Path,
   Text as SvgText,
@@ -62,6 +67,7 @@ const CHORD_COUNT = STRING_COUNT;
 
 // ===== Parametros de SUAVIZACAO =====
 const NOTE_HOLD_MS = 400; // tempo que a nota permanece apos o som sumir
+const PROGRESS_TICK_MS = 100; // reavaliacao do progresso com nota firme
 
 // Cor do aro: e FUNCIONAL, nao decorativa. Sem sinal fica apagado (nao faz
 // sentido gritar "desafinado" com o app parado), vermelho enquanto desafinado
@@ -108,11 +114,61 @@ function useStringTuner(
     index: number | null;
     cents: number;
     hasSignal: boolean;
-  }>({ index: lockedIndex, cents: 0, hasSignal: false });
+    inTune: boolean;
+    tuned: number[]; // cordas ja afinadas (progresso "X de 6")
+    allTuned: boolean;
+    progressFor: number[]; // afinacao a que o progresso se refere
+  }>({
+    index: lockedIndex,
+    cents: 0,
+    hasSignal: false,
+    inTune: false,
+    tuned: [],
+    allTuned: false,
+    progressFor: calStringFreqs,
+  });
 
   const smootherRef = useRef(createCentsSmoother());
+  const inTuneRef = useRef(false);
+  const progressRef = useRef(createTuningProgress(calStringFreqs.length));
+  const progressForRef = useRef(calStringFreqs);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentIndexRef = useRef<number | null>(null);
+  // Ultima leitura com nota: reavaliada a cada PROGRESS_TICK_MS, porque uma
+  // nota firme pode repetir o mesmo valor e nao disparar o efeito abaixo
+  const lastReadingRef = useRef<ProgressReading | null>(null);
+
+  // Atualiza o progresso; vibra e redesenha so quando ele muda
+  const applyProgress = useCallback((r: ProgressReading, now: number) => {
+    const progress = progressRef.current;
+    const ev = progress.update(r, now);
+    if (ev.allTuned) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+        () => {},
+      );
+    } else if (ev.stringTuned != null) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    }
+    return ev;
+  }, []);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const r = lastReadingRef.current;
+      if (!r) return;
+      const ev = applyProgress(r, Date.now());
+      if (ev.changed) {
+        const progress = progressRef.current;
+        setDisplay((d) => ({
+          ...d,
+          tuned: [...progress.tuned()],
+          allTuned: progress.isComplete(),
+          progressFor: progressForRef.current,
+        }));
+      }
+    }, PROGRESS_TICK_MS);
+    return () => clearInterval(id);
+  }, [applyProgress]);
 
   // Troca de corda travada / afinacao: zera a suavizacao
   useEffect(() => {
@@ -120,6 +176,14 @@ function useStringTuner(
   }, [lockedIndex]);
 
   useEffect(() => {
+    // Trocou a afinacao ou o A4: o progresso recomeca
+    if (progressForRef.current !== calStringFreqs) {
+      progressForRef.current = calStringFreqs;
+      progressRef.current = createTuningProgress(calStringFreqs.length);
+    }
+    const progress = progressRef.current;
+    const now = Date.now();
+
     // So conta como sinal se houver uma nota CLARA (evita travar em ruido ambiente)
     const hasRawSignal = frequency > 50 && confidence >= confidenceMin;
 
@@ -135,26 +199,67 @@ function useStringTuner(
         if (idx !== currentIndexRef.current) {
           currentIndexRef.current = idx;
           smootherRef.current.reset();
+          inTuneRef.current = false;
         }
         const avg = smootherRef.current.push(
           centsBetween(frequency, calStringFreqs[idx]),
         );
-        setDisplay({ index: idx, cents: avg, hasSignal: true });
+        const inTune = isInTune(avg, inTuneRef.current);
+        inTuneRef.current = inTune;
+
+        const reading: ProgressReading = {
+          index: idx,
+          inTune,
+          cents: avg,
+          hasSignal: true,
+        };
+        lastReadingRef.current = reading;
+        // Vibra a cada corda afinada e mais forte ao completar todas
+        applyProgress(reading, now);
+
+        setDisplay({
+          index: idx,
+          cents: avg,
+          hasSignal: true,
+          inTune,
+          tuned: [...progress.tuned()],
+          allTuned: progress.isComplete(),
+          progressFor: calStringFreqs,
+        });
         return;
       }
       // Sinal presente mas longe de qualquer corda: cai para o hold abaixo
     }
 
     // Sem sinal (ou longe de tudo): segura por NOTE_HOLD_MS e entao limpa
+    lastReadingRef.current = null;
+    applyProgress(
+      { index: null, inTune: false, cents: 0, hasSignal: false },
+      now,
+    );
     if (!holdTimerRef.current && currentIndexRef.current != null) {
       holdTimerRef.current = setTimeout(() => {
         currentIndexRef.current = null;
         smootherRef.current.reset();
+        inTuneRef.current = false;
         holdTimerRef.current = null;
-        setDisplay({ index: lockedIndex, cents: 0, hasSignal: false });
+        setDisplay((d) => ({
+          ...d,
+          index: lockedIndex,
+          cents: 0,
+          hasSignal: false,
+          inTune: false,
+        }));
       }, NOTE_HOLD_MS);
     }
-  }, [frequency, confidence, confidenceMin, calStringFreqs, lockedIndex]);
+  }, [
+    frequency,
+    confidence,
+    confidenceMin,
+    calStringFreqs,
+    lockedIndex,
+    applyProgress,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -174,8 +279,10 @@ const StringLinesFullWidth = memo(
     hasSignal,
     lockedStringIndex,
     layout,
+    tunedStrings,
   }: {
     layout: DialLayout;
+    tunedStrings: number[];
     centsValue: number;
     tuningNames: string[];
     activeStringIndex: number | null;
@@ -247,6 +354,7 @@ const StringLinesFullWidth = memo(
               >
                 {stringName}
                 {isTargeted && !isActive ? " •" : ""}
+                {tunedStrings.includes(i) ? " ✓" : ""}
               </SvgText>
             </React.Fragment>
           );
@@ -264,8 +372,10 @@ function StringHitTargets({
   lockedStringIndex,
   onStringPress,
   layout,
+  tunedStrings,
 }: {
   layout: DialLayout;
+  tunedStrings: number[];
   tuningNames: string[];
   lockedStringIndex: number | null;
   onStringPress: (index: number) => void;
@@ -292,7 +402,10 @@ function StringHitTargets({
             onPress={() => onStringPress(i)}
             accessibilityRole="button"
             accessibilityLabel={
-              stringOrdinal(i) + ", " + spokenStringName(name)
+              stringOrdinal(i) +
+              ", " +
+              spokenStringName(name) +
+              (tunedStrings.includes(i) ? ", afinada" : "")
             }
             accessibilityHint={
               locked
@@ -369,7 +482,11 @@ function PitchLabDisplayComponent({
   const activeStringIndex = tuner.index;
   const hasSignal = tuner.hasSignal;
   const displayCents = tuner.cents;
-  const displayInTune = hasSignal && tuneAction(displayCents) === "AFINADO";
+  const displayInTune = hasSignal && tuner.inTune;
+  // Progresso so vale para a afinacao atual (some ao trocar, mesmo sem som)
+  const progressValid = tuner.progressFor === calStringFreqs;
+  const tunedStrings = progressValid ? tuner.tuned : [];
+  const allTuned = progressValid && tuner.allTuned;
 
   // Nota exibida = a da corda ativa (ou travada)
   const label =
@@ -387,7 +504,13 @@ function PitchLabDisplayComponent({
     AFROUXAR: { color: "#FFB300", arrow: " ▼" },
     APERTAR: { color: "#FFB300", arrow: " ▲" },
   } as const;
-  const actionName = hasSignal ? tuneAction(displayCents) : null;
+  const actionName = !hasSignal
+    ? null
+    : displayInTune
+      ? "AFINADO"
+      : displayCents > 0
+        ? "AFROUXAR"
+        : "APERTAR";
   const action = actionName
     ? { text: actionName, ...ACTION_STYLE[actionName] }
     : null;
@@ -495,6 +618,7 @@ function PitchLabDisplayComponent({
             hasSignal={hasSignal}
             lockedStringIndex={lockedStringIndex}
             layout={layout}
+            tunedStrings={tunedStrings}
           />
         </View>
 
@@ -504,6 +628,7 @@ function PitchLabDisplayComponent({
           lockedStringIndex={lockedStringIndex}
           onStringPress={handleStringPress}
           layout={layout}
+          tunedStrings={tunedStrings}
         />
 
         {/* Chip para voltar ao modo automatico */}
@@ -551,6 +676,18 @@ function PitchLabDisplayComponent({
         )}
       </View>
 
+      {/* Progresso: X de 6 cordas afinadas */}
+      <Text
+        style={[styles.progressText, allTuned && styles.progressDone]}
+        accessibilityLiveRegion="polite"
+      >
+        {allTuned
+          ? "✓ Violão afinado!"
+          : tunedStrings.length > 0
+            ? tunedStrings.length + " de " + tuningNames.length + " afinadas"
+            : " "}
+      </Text>
+
       {/* Seletor de afinacao */}
       <TouchableOpacity
         style={styles.tuningSelector}
@@ -575,6 +712,16 @@ function PitchLabDisplayComponent({
 export const PitchLabDisplay = memo(PitchLabDisplayComponent);
 
 const styles = StyleSheet.create({
+  progressText: {
+    color: "#8A8A8A",
+    fontSize: 13,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+    marginTop: 4,
+    marginBottom: 8,
+    minHeight: 18,
+  },
+  progressDone: { color: "#00E676" },
   wrapper: { alignItems: "center", backgroundColor: "#000000" },
   noteRow: {
     flexDirection: "row",

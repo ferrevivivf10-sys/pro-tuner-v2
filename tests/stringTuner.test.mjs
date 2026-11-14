@@ -11,6 +11,8 @@ import {
   spokenStringName,
   stringFreq,
   tuneAction,
+  isInTune,
+  median,
   TUNING_STRING_NAMES,
   STRING_GUARD_CENTS,
   CENTS_SMOOTH_SIZE,
@@ -80,10 +82,46 @@ test("media dos cents: suaviza e esquece leituras antigas", () => {
   assert.equal(sm.push(-6), -6);
 });
 
-test("media dos cents usa CENTS_SMOOTH_SIZE leituras por padrao", () => {
+test("mediana dos cents usa CENTS_SMOOTH_SIZE leituras por padrao", () => {
   const sm = createCentsSmoother();
   for (let i = 0; i < CENTS_SMOOTH_SIZE; i++) sm.push(0);
-  near(sm.push(50), 50 / CENTS_SMOOTH_SIZE);
+  assert.equal(sm.push(50), 0); // uma leitura torta nao move a mediana
+});
+
+test("mediana ignora leituras tortas do fim da nota (caso real)", () => {
+  // La 2 do teste de 14/11: fim da nota com leitura de -52 cents
+  const sm = createCentsSmoother();
+  [-2, -1, 0, -2, -52].forEach((c) => sm.push(c));
+  assert.equal(sm.push(-1), -1);
+  assert.equal(median([3, 1, 2, 10]), 2.5);
+});
+
+test("afinado com folga: entra abaixo de 5, so sai acima de 7", () => {
+  assert.equal(isInTune(4.9, false), true);
+  assert.equal(isInTune(5, false), false);
+  assert.equal(isInTune(6, false), false); // nao entra com 6
+  assert.equal(isInTune(6, true), true); // mas continua afinado com 6
+  assert.equal(isInTune(-6.9, true), true);
+  assert.equal(isInTune(7, true), false);
+  assert.equal(tuneAction(6, true), "AFINADO");
+  assert.equal(tuneAction(6, false), "AFROUXAR");
+  assert.equal(tuneAction(-8, true), "APERTAR");
+});
+
+test("folga reduz o pisca-pisca do afinado em volta de 5 cents", () => {
+  const leituras = [4, 5.5, 4.5, 6, 4.8, 5.2, 4.9, 6.5, 4.2];
+  const conta = (folga) => {
+    let estado = false,
+      trocas = 0;
+    for (const c of leituras) {
+      const novo = folga ? isInTune(c, estado) : isInTune(c, false);
+      if (novo !== estado) trocas++;
+      estado = novo;
+    }
+    return trocas;
+  };
+  assert.ok(conta(true) < conta(false));
+  assert.equal(conta(true), 1); // so a entrada
 });
 
 test("acao: afinado, afrouxar (agudo) e apertar (grave)", () => {
