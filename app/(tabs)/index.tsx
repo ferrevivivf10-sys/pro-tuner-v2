@@ -236,6 +236,11 @@ export default function TunerScreen() {
           />
         </View>
 
+        {/* Captura com problema (taxa de entrega fora do esperado ou parada) */}
+        {pitchData.captureWarning && (
+          <Text style={styles.warnText}>{pitchData.captureWarning}</Text>
+        )}
+
         {/* Modo de teste (Ajustes): dados da captacao + gravar audio e leituras */}
         {(testMode || testSeconds !== null || testSaving) && (
           <>
@@ -324,6 +329,7 @@ const styles = StyleSheet.create({
   testBtnText: { color: "#777", fontSize: 11, fontWeight: "700", letterSpacing: 1 },
   testBtnTextOn: { color: "#FF5252" },
   methodText: { color: "#444", fontSize: 10, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 16, marginTop: 8 },
+  warnText: { color: "#ff9f43", fontSize: 12, textAlign: "center", marginTop: 8, paddingHorizontal: 16 },
   divider: { width: "60%", height: 1, backgroundColor: "#1A1A1A", marginBottom: 20 },
   toggleBtn: { backgroundColor: "#0A0A0A", paddingHorizontal: 48, paddingVertical: 14, borderRadius: 32, borderWidth: 1.5, borderColor: "#333" },
   toggleBtnActive: { borderColor: "#00E676", backgroundColor: "#0A1A0A" },

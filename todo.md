@@ -28,6 +28,7 @@ Estado em 14/11/2026 · versão 1.0.53 na `main`.
 - [x] Modo de teste em Ajustes: grava .wav + .csv; filtro 1500 Hz opcional
 - [x] Testes automatizados (`npm test`): detector com trechos reais + lógica do cabo
 - [x] Build checa tipos (`tsc`) antes dos testes
+- [x] Monitor da taxa de entrega: aviso e nota bloqueada se a captura sair de 44.100 ± 2% ou parar (validar o limite no aparelho)
 - [x] Sobras do template, docs antigos e suporte web removidos
 
 ## Pendente

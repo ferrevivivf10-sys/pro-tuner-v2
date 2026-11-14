@@ -82,6 +82,21 @@ chega praticamente cru.
 
 ---
 
+## Monitor da taxa de entrega (`src/audio/rateMonitor.ts`)
+
+Mede quantas amostras o app recebe por segundo de relógio (inclinação do total
+acumulado × tempo, janela de 4 s). Detecta atraso, perda ou interrupção do fluxo
+entregue ao app. **Não** mede a taxa física do conversor: o Android pode
+reamostrar antes de entregar.
+
+- Fora de 44.100 ± 2% por 2 s seguidos: aviso na tela e nenhuma nota exibida
+  (a frequência não é "corrigida").
+- Sem amostras por mais de 1 s: aviso de captura parada.
+- O limite de 2% é inicial; a taxa medida vai para o CSV do modo de teste
+  (coluna `taxa_entrega`) para ser validada no aparelho.
+
+---
+
 ## Modo de teste
 
 Liga em **Ajustes → Modo de teste**. Mostra um botão de gravar e dados técnicos
@@ -89,7 +104,7 @@ na tela. Grava até 120 s e salva, numa pasta escolhida pelo usuário:
 
 - `.wav`: o áudio exato que o detector recebeu;
 - `.csv`: uma linha por leitura (amostra, RMS, frequência crua, clareza, status,
-  frequência mostrada).
+  frequência mostrada, taxa de entrega medida).
 
 Essas gravações são usadas para validar mudanças offline antes de gastar build.
 
@@ -102,7 +117,9 @@ Essas gravações são usadas para validar mudanças offline antes de gastar bui
 - `mpm.test.mjs`: senos, harmônicos e trechos reais de violão em
   `tests/fixtures/` (Mi agudo, ataque do nylon, ataque do Si e do Mizinho);
 - `cable.test.mjs`: lógica do modo cabo (plugar/desplugar, releitura sem
-  sobreposição, falhas).
+  sobreposição, falhas);
+- `rate.test.mjs`: monitor da taxa de entrega (44.100, 43.000 e 45.000
+  amostras/s, intervalos irregulares, rajadas, interrupção, buffer vazio).
 
 ---
 
@@ -144,6 +161,7 @@ src/
   audio/
     MPMProcessor.ts         Detecção (MPM)
     cableMode.ts            Lógica do modo cabo
+    rateMonitor.ts          Monitor da taxa de entrega de amostras
     TestRecorder.ts         Gravação do modo de teste (.wav + .csv)
   hooks/
     usePitchDetectorFinal.ts  Captura + detecção + estabilidade

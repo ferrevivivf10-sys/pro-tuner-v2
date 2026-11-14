@@ -4,6 +4,7 @@ import { decode } from "base-64";
 import { useAudioRecorder } from "@siteed/audio-studio";
 import { MPMProcessor } from "../audio/MPMProcessor";
 import { TestRecorder } from "../audio/TestRecorder";
+import { createRateMonitor, EXPECTED_RATE } from "../audio/rateMonitor";
 import { NOTES } from "../utils/noteUtils";
 
 export interface PitchData {
@@ -14,6 +15,7 @@ export interface PitchData {
   inTune: boolean;
   confidence: number;
   detectionMethod: string;
+  captureWarning?: string; // captura com problema: a nota nao e mostrada
 }
 
 const INITIAL_PITCH_DATA: PitchData = {
@@ -27,6 +29,8 @@ const INITIAL_PITCH_DATA: PitchData = {
 };
 
 const SAMPLE_RATE = 44100;
+const STALL_CHECK_MS = 500; // de quanto em quanto tempo confere se a captura parou
+const STALL_WARNING = "Captura parada: o microfone não está enviando áudio";
 const BUFFER_SIZE = 2048;
 const HOP_SIZE = 1024; // 50% de sobreposicao: detecta 2x mais vezes que o buffer avanca
 const MAX_BUFFER = BUFFER_SIZE * 2;
@@ -137,6 +141,7 @@ export function usePitchDetectorFinal(
   const lowpassRef = useRef(lowpass);
   const filteredRef = useRef<Float32Array>(new Float32Array(0)); // mesmo buffer, filtrado
   const lpStateRef = useRef({ x1: 0, x2: 0, y1: 0, y2: 0 });
+  const rateMonitorRef = useRef(createRateMonitor()); // taxa de entrega de amostras
 
   const { startRecording, stopRecording } = useAudioRecorder();
 
@@ -152,6 +157,19 @@ export function usePitchDetectorFinal(
     if (!isActive) return;
 
     let cancelled = false;
+
+    // Monitor da taxa de entrega: recomeca a cada captura e confere se ela parou
+    rateMonitorRef.current.reset();
+    const stallTimer = setInterval(() => {
+      if (rateMonitorRef.current.check(performance.now()).status !== "parado") return;
+      stableFreqRef.current = 0;
+      candCountRef.current = 0;
+      setPitchData((p) =>
+        p.captureWarning === STALL_WARNING
+          ? p
+          : { ...p, note: "-", frequency: 0, confidence: 0, captureWarning: STALL_WARNING }
+      );
+    }, STALL_CHECK_MS);
 
     const start = async () => {
       try {
@@ -189,6 +207,25 @@ export function usePitchDetectorFinal(
             const samples = base64ToFloat32(event.data);
             lastChunkLenRef.current = samples.length;
             TestRecorder.addSamples(samples); // DIAGNOSTICO: so grava se o teste estiver ligado
+
+            // Taxa de entrega fora do esperado: avisa e nao mostra nota (nao corrige a frequencia)
+            const rate = rateMonitorRef.current.push(samples.length, performance.now());
+            TestRecorder.setDeliveryRate(rate.rate);
+            if (rate.status === "fora" && rate.rate !== null) {
+              const warning =
+                "Captura irregular: " + Math.round(rate.rate) + " amostras/s (esperado " + EXPECTED_RATE + ")";
+              bufferRef.current = new Float32Array(0);
+              filteredRef.current = new Float32Array(0);
+              stableFreqRef.current = 0;
+              candCountRef.current = 0;
+              setPitchData((p) =>
+                p.captureWarning === warning
+                  ? p
+                  : { ...p, note: "-", frequency: 0, confidence: 0, captureWarning: warning }
+              );
+              return;
+            }
+            setPitchData((p) => (p.captureWarning ? { ...p, captureWarning: undefined } : p));
 
             // Copia filtrada do mesmo bloco (o estado do filtro continua entre blocos)
             const filtered = new Float32Array(samples.length);
@@ -382,6 +419,7 @@ export function usePitchDetectorFinal(
 
     return () => {
       cancelled = true;
+      clearInterval(stallTimer);
       stopRecording().catch(() => {});
       bufferRef.current = new Float32Array(0);
       filteredRef.current = new Float32Array(0);
