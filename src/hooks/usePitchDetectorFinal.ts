@@ -242,6 +242,9 @@ export function usePitchDetectorFinal(
               const canRender =
                 now - lastUpdateRef.current >= UI_UPDATE_MIN_INTERVAL_MS;
 
+              // Volume de toda leitura (inclusive silencio) para achar o ataque
+              if (stabilize) stabilizerRef.current.observe(rms, now);
+
               const diag = (prefix: string, clar?: number) =>
                 prefix +
                 "RMS " +
@@ -330,6 +333,13 @@ export function usePitchDetectorFinal(
                   now,
                   stringFreqsRef.current,
                 );
+                if (step.kind === "noAttack") {
+                  // Fim da nota ou ruido: nao troca a nota; limpa como "sem nota"
+                  TestRecorder.logFrame(rms, rawFreq, clarity, "sem_ataque", 0);
+                  if (stabilizerRef.current.release(now, HOLD_SOUND_MS))
+                    clearNote(diag("SEM ATAQUE · ", clarity));
+                  return;
+                }
                 if (step.kind === "hold") {
                   TestRecorder.logFrame(rms, rawFreq, clarity, "segurando", 0);
                   if (canRender) {

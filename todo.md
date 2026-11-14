@@ -40,14 +40,15 @@ Estado em 14/11/2026 · versão 1.0.53 na `main`.
 - [x] Mediana dos cents e folga no "afinado" (entra < 5, sai > 7)
 - [x] "X de 6 cordas afinadas" com ✓ nas cordas e vibração
 - [x] Fonte do microfone no modo de teste (Padrão / Voz / Cru) e web sem filtros de voz
+- [x] Fim da nota: nota nova só entra logo após um ataque (salto de volume); sub-harmônicos, cordas por simpatia e ruído no fim da nota descartados
 
 ## Pendente
 
-- [ ] Comparar no celular as fontes Padrão e Voz (gravar teste com cada uma) e decidir o padrão
 - [ ] Assinatura própria do APK (chave + segredo no GitHub)
 
 ## Decidido não fazer (por enquanto)
 
+- Fonte Voz como padrão: nos testes de 14/11 com barulho aceitou mais leituras erradas que a Padrão (6 contra 2) e o sinal chega ~3x mais fraco. Continua no modo de teste
 - Fonte sem processamento (`UNPROCESSED`) como padrão: no celular de teste (14/11) o Android não suporta e abre a `MIC`. Continua disponível como "Cru" no modo de teste
 - Juiz SWIPE: empatou com barulho real (5 consertos, 5 estragos)
 - YIN, escolha pela sequência e janela maior (3072/4096): sem ganho
