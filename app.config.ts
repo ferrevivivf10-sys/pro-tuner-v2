@@ -46,11 +46,6 @@ const config: ExpoConfig = {
       "android.permission.USB_PERMISSION",
     ],
   },
-  web: {
-    bundler: "metro",
-    output: "static",
-    favicon: "./assets/images/favicon.png",
-  },
   plugins: [
     "expo-router",
     "expo-asset",

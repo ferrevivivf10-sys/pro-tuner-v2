@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Platform, PermissionsAndroid } from "react-native";
+import { PermissionsAndroid } from "react-native";
 import { decode } from "base-64";
 import { useAudioRecorder } from "@siteed/audio-studio";
 import { MPMProcessor } from "../audio/MPMProcessor";
@@ -149,7 +149,6 @@ export function usePitchDetectorFinal(
   lowpassRef.current = lowpass;
 
   useEffect(() => {
-    if (Platform.OS === "web") return;
     if (!isActive) return;
 
     let cancelled = false;
@@ -389,71 +388,6 @@ export function usePitchDetectorFinal(
       lpStateRef.current = { x1: 0, x2: 0, y1: 0, y2: 0 };
     };
   }, [isActive, refA4, noiseThreshold, stabilize, sensitivity]);
-
-  useEffect(() => {
-    if (Platform.OS !== "web") return;
-
-    let audioCtx: AudioContext | null = null;
-    let stream: MediaStream | null = null;
-    let animationFrame = 0;
-
-    const start = async () => {
-      if (!isActive) return;
-
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        audioCtx = new AudioContext();
-        const analyser = audioCtx.createAnalyser();
-        analyser.fftSize = BUFFER_SIZE;
-        audioCtx.createMediaStreamSource(stream).connect(analyser);
-        const buffer = new Float32Array(analyser.fftSize);
-
-        const detect = () => {
-          if (!isActiveRef.current) return;
-          analyser.getFloatTimeDomainData(buffer);
-
-          let sumSq = 0;
-          for (let i = 0; i < buffer.length; i++) {
-            sumSq += buffer[i] * buffer[i];
-          }
-          const rms = Math.sqrt(sumSq / buffer.length);
-
-          if (rms >= noiseThreshold) {
-            const { frequency: freq, clarity } = MPMProcessor.detectPitch(buffer, SAMPLE_RATE);
-            if (freq > 0) {
-              const info = getNoteInfo(freq, refA4);
-              if (info) {
-                const cents = calculateCentsToTarget(freq, info.targetFreq);
-                setPitchData({
-                  note: info.noteName,
-                  octave: info.octave,
-                  frequency: freq,
-                  cents,
-                  inTune: Math.abs(cents) < 10,
-                  confidence: clarity,
-                  detectionMethod: "Web Audio API + MPM",
-                });
-              }
-            }
-          }
-
-          animationFrame = requestAnimationFrame(detect);
-        };
-
-        detect();
-      } catch (error) {
-        console.error("Web audio error:", error);
-      }
-    };
-
-    start();
-
-    return () => {
-      cancelAnimationFrame(animationFrame);
-      stream?.getTracks().forEach((t) => t.stop());
-      audioCtx?.close();
-    };
-  }, [isActive, refA4, noiseThreshold]);
 
   return pitchData;
 }

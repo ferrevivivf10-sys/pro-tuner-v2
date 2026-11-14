@@ -163,7 +163,7 @@ tests/                      Testes automatizados e trechos reais de áudio
 ## Limitações conhecidas
 
 - Baixo não é suportado: a faixa começa em 60 Hz (o Mi do baixo é 41 Hz).
-- iOS e web têm código de captura, mas não são alvo nem testados.
+- iOS tem código de captura, mas não é alvo nem testado. O suporte web foi removido.
 - O APK usa a assinatura de debug (assinatura própria ainda pendente).
 
 ---
