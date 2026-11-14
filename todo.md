@@ -36,6 +36,7 @@ Estado em 14/11/2026 · versão 1.0.53 na `main`.
 - [x] Actions do workflow atualizadas (Node 24)
 - [x] Mostrador se adapta a telas estreitas (`dialLayout.ts`), testado de 320 a 412 px
 - [x] Lógica do afinador por corda separada da tela (`stringTuner.ts`) e testada
+- [x] Expo SDK 54 → 57 (React Native 0.86, React 19.2); vulnerabilidades 44 → 22
 
 ## Pendente
 
@@ -43,7 +44,7 @@ Estado em 14/11/2026 · versão 1.0.53 na `main`.
 
 ## Decidido não fazer (por enquanto)
 
-- Fonte de áudio sem processamento (`UNPROCESSED`): testada no branch `claude/audio-unprocessed` com a `@siteed/audio-studio` 4.0 beta (+ patch para o SDK 54). No celular de teste (14/11) o Android não suporta e abre a `MIC`; a detecção já era boa nas 6 cordas. Retomar quando a 4.x sair estável ou o app for para o SDK 57
+- Fonte de áudio sem processamento (`UNPROCESSED`): testada no branch `claude/audio-unprocessed` com a `@siteed/audio-studio` 4.0 beta (+ patch para o SDK 54). No celular de teste (14/11) o Android não suporta e abre a `MIC`; a detecção já era boa nas 6 cordas. Retomar quando a 4.x sair estável (o app já está no SDK 57)
 - Juiz SWIPE: empatou com barulho real (5 consertos, 5 estragos)
 - YIN, escolha pela sequência e janela maior (3072/4096): sem ganho
 - Filtro 1500 Hz como padrão: mostra nota nas pausas com ruído

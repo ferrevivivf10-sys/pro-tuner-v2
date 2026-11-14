@@ -1,7 +1,7 @@
 # Pro Tuner
 
 Afinador cromático para violão e guitarra de 6 cordas, feito em **React Native +
-Expo (SDK 54)**. Alvo atual: **Android**. Capta o som pelo microfone do celular
+Expo (SDK 57)**. Alvo atual: **Android**. Capta o som pelo microfone do celular
 ou por cabo (saída P3/P10 do instrumento via USB-C), detecta a frequência com o
 **McLeod Pitch Method (MPM)** e mostra nota, desvio em cents e a corda.
 

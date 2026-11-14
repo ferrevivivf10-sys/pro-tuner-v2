@@ -23,7 +23,8 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const systemScheme = useSystemColorScheme() ?? "light";
+  const system = useSystemColorScheme();
+  const systemScheme: ColorScheme = system === "dark" ? "dark" : "light";
   const [colorScheme, setColorSchemeState] =
     useState<ColorScheme>(systemScheme);
 

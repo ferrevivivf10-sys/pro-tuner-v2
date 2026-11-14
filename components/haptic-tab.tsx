@@ -1,5 +1,6 @@
-import { BottomTabBarButtonProps } from "@react-navigation/bottom-tabs";
-import { PlatformPressable } from "@react-navigation/elements";
+// Expo Router 57 traz a propria copia do React Navigation
+import type { BottomTabBarButtonProps } from "expo-router/js-tabs";
+import { PlatformPressable } from "expo-router/react-navigation";
 import * as Haptics from "expo-haptics";
 
 export function HapticTab(props: BottomTabBarButtonProps) {

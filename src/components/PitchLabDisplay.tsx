@@ -337,17 +337,24 @@ function PitchLabDisplayComponent({
   // ===== Modo por corda (manual) =====
   // Tocar no nome de uma corda trava a leitura naquela corda especifica;
   // tocar de novo (ou no chip "AUTO") volta para deteccao automatica.
-  const [lockedStringIndex, setLockedStringIndex] = useState<number | null>(
-    null,
+  // A trava vale so para a afinacao em que foi feita: trocar de afinacao
+  // volta para o automatico (derivado no render, sem efeito)
+  const [lock, setLock] = useState<{ tuning: string; index: number | null }>({
+    tuning: selectedTuning,
+    index: null,
+  });
+  const lockedStringIndex = lock.tuning === selectedTuning ? lock.index : null;
+
+  const handleStringPress = useCallback(
+    (index: number) => {
+      setLock((prev) => ({
+        tuning: selectedTuning,
+        index:
+          prev.tuning === selectedTuning && prev.index === index ? null : index,
+      }));
+    },
+    [selectedTuning],
   );
-
-  useEffect(() => {
-    setLockedStringIndex(null);
-  }, [selectedTuning]);
-
-  const handleStringPress = useCallback((index: number) => {
-    setLockedStringIndex((prev) => (prev === index ? null : index));
-  }, []);
 
   const isLocked = lockedStringIndex !== null;
 
@@ -503,7 +510,7 @@ function PitchLabDisplayComponent({
         {isLocked && (
           <TouchableOpacity
             style={styles.modeBadge}
-            onPress={() => setLockedStringIndex(null)}
+            onPress={() => setLock({ tuning: selectedTuning, index: null })}
             activeOpacity={0.7}
             accessibilityRole="button"
             accessibilityLabel="Voltar à detecção automática da corda"

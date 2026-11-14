@@ -7,6 +7,7 @@ import React, {
   useCallback,
   useMemo,
   useRef,
+  useLayoutEffect,
 } from "react";
 import {
   View,
@@ -89,7 +90,9 @@ export default function TunerScreen() {
   // plugado com o app aberto nem sempre chega. Quando o modo muda (mic/cabo),
   // o detector reinicia a captura sozinho.
   const refreshRef = useRef(refreshDevices);
-  refreshRef.current = refreshDevices;
+  useLayoutEffect(() => {
+    refreshRef.current = refreshDevices;
+  });
   useEffect(() => {
     if (!isActive || !appInForeground || !tabFocused) return;
     const poller = createDevicePoller(
@@ -106,10 +109,11 @@ export default function TunerScreen() {
     return loaded;
   }, []);
 
-  // Carga inicial
+  // Carga inicial (setState so no callback, depois da leitura)
   useEffect(() => {
-    loadSettings()
-      .then(() => {
+    SettingsManager.loadSettings()
+      .then((loaded) => {
+        setSettings(loaded);
         setIsActive(true);
       })
       .catch((error) => {
@@ -117,7 +121,7 @@ export default function TunerScreen() {
         Alert.alert("Erro", "Nao foi possivel carregar as configuracoes");
       })
       .finally(() => setIsLoading(false));
-  }, [loadSettings]);
+  }, []);
 
   // Recarrega ao voltar para a aba (as abas nao desmontam, entao mudancas
   // feitas em Settings — A4, afinacao, sensibilidade — precisam ser relidas).

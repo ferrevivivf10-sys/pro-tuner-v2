@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { Platform, PermissionsAndroid } from "react-native";
 import { decode } from "base-64";
 import { useAudioRecorder } from "@siteed/audio-studio";
@@ -132,9 +132,11 @@ export function usePitchDetectorFinal(
 
   // Lidos por ref para nao reiniciar a gravacao quando mudam (as funcoes do
   // gravador podem ser recriadas a cada render)
-  stringFreqsRef.current = stringFreqs;
-  lowpassRef.current = lowpass;
-  recorderRef.current = recorder;
+  useLayoutEffect(() => {
+    stringFreqsRef.current = stringFreqs;
+    lowpassRef.current = lowpass;
+    recorderRef.current = recorder;
+  });
 
   useEffect(() => {
     if (Platform.OS === "web") return;
