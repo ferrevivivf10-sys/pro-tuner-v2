@@ -41,6 +41,7 @@ export default function SettingsScreen() {
   const [ringStyle, setRingStyle] = useState<RingStyleName>(DEFAULT_RING_STYLE);
   const [testMode, setTestMode] = useState(false);
   const [testLowpass, setTestLowpass] = useState(false);
+  const [testUnprocessed, setTestUnprocessed] = useState(false);
 
   // Carregar configurações salvas
   useEffect(() => {
@@ -53,6 +54,7 @@ export default function SettingsScreen() {
         setRingStyle(settings.ringStyle);
         setTestMode(settings.testMode);
         setTestLowpass(settings.testLowpass);
+        setTestUnprocessed(settings.testUnprocessed);
       } catch (error) {
         console.error("Erro ao carregar configurações:", error);
       }
@@ -124,6 +126,15 @@ export default function SettingsScreen() {
       setTestLowpass(value);
     } catch (error) {
       console.error("Erro ao salvar filtro de teste:", error);
+    }
+  };
+
+  const saveTestUnprocessed = async (value: boolean) => {
+    try {
+      await SettingsManager.setTestUnprocessed(value);
+      setTestUnprocessed(value);
+    } catch (error) {
+      console.error("Erro ao salvar fonte de audio:", error);
     }
   };
 
@@ -411,6 +422,43 @@ export default function SettingsScreen() {
                         ]}
                       >
                         {value ? "Ligado" : "Desligado"}
+                      </Text>
+                      {isActive && <Text style={styles.checkmark}>✓</Text>}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={[styles.sectionDescription, styles.subOption]}>
+                Fonte do microfone sem processamento (sem supressão de ruído nem
+                ganho automático do Android). Experimental: se o celular não
+                suportar, usa a fonte padrão e os dados técnicos mostram
+                {" “cru indisponivel”"}.
+              </Text>
+              <View style={styles.optionsContainer}>
+                {[false, true].map((value) => {
+                  const isActive = testUnprocessed === value;
+                  return (
+                    <TouchableOpacity
+                      key={String(value)}
+                      style={[
+                        styles.optionButton,
+                        isActive && styles.optionButtonActive,
+                      ]}
+                      onPress={() => saveTestUnprocessed(value)}
+                      accessibilityRole="radio"
+                      accessibilityLabel={
+                        "Fonte sem processamento " +
+                        (value ? "ligada" : "desligada")
+                      }
+                      accessibilityState={{ checked: isActive }}
+                    >
+                      <Text
+                        style={[
+                          styles.optionText,
+                          isActive && styles.optionTextActive,
+                        ]}
+                      >
+                        {value ? "Ligada" : "Desligada"}
                       </Text>
                       {isActive && <Text style={styles.checkmark}>✓</Text>}
                     </TouchableOpacity>

@@ -34,11 +34,12 @@ Estado em 14/11/2026 · versão 1.0.53 na `main`.
 - [x] Lint sem avisos e código formatado com Prettier
 - [x] Acessibilidade (TalkBack) no Afinador, em Ajustes e nas Entradas de áudio
 - [x] Actions do workflow atualizadas (Node 24)
+- [x] Fonte de áudio sem processamento no modo de teste (`@siteed/audio-studio` 4.0 beta)
 
 ## Pendente
 
 - [ ] Assinatura própria do APK (chave + segredo no GitHub)
-- [ ] Fonte de áudio sem processamento: só na `@siteed/audio-studio` 4.x (beta)
+- [ ] Validar a fonte sem processamento no celular (gravar testes com e sem) e decidir se vira padrão
 
 ## Decidido não fazer (por enquanto)
 

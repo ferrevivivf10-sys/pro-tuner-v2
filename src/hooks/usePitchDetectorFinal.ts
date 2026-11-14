@@ -33,6 +33,11 @@ const INITIAL_PITCH_DATA: PitchData = {
 };
 
 const SAMPLE_RATE = 44100;
+
+// Fonte de audio do Android. "mic" e o padrao (o fabricante pode aplicar
+// supressao de ruido e ganho automatico); "unprocessed" pede o sinal cru e
+// cai para "mic" se o aparelho nao suportar.
+export type MicSource = "mic" | "unprocessed";
 const BUFFER_SIZE = 2048;
 const HOP_SIZE = 1024; // 50% de sobreposicao: detecta 2x mais vezes que o buffer avanca
 const MAX_BUFFER = BUFFER_SIZE * 2;
@@ -110,6 +115,7 @@ export function usePitchDetectorFinal(
   stabilize: boolean = false,
   stringFreqs: number[] = [], // cordas da afinacao (Hz, ja com o A4 escolhido)
   lowpass: boolean = false, // modo de teste: filtra o audio antes do detector
+  audioSource: MicSource = "mic", // modo de teste: fonte sem processamento
 ): PitchData {
   const [pitchData, setPitchData] = useState<PitchData>(INITIAL_PITCH_DATA);
 
@@ -117,6 +123,7 @@ export function usePitchDetectorFinal(
   const bufferRef = useRef<Float32Array>(new Float32Array(0));
   const lastUpdateRef = useRef(0);
   const lastChunkLenRef = useRef(0); // DIAGNOSTICO: amostras por callback
+  const sourceTagRef = useRef(""); // DIAGNOSTICO: fonte aberta de fato
   const stabilizerRef = useRef(createStabilizer()); // modo microfone
   const stringFreqsRef = useRef(stringFreqs);
   const lowpassRef = useRef(lowpass);
@@ -165,7 +172,8 @@ export function usePitchDetectorFinal(
           return;
         }
 
-        await recorderRef.current.startRecording({
+        const result = await recorderRef.current.startRecording({
+          android: { audioSource },
           sampleRate: SAMPLE_RATE,
           channels: 1,
           encoding: "pcm_16bit",
@@ -238,7 +246,8 @@ export function usePitchDetectorFinal(
                 rms.toFixed(4) +
                 (clar !== undefined ? " · clar " + clar.toFixed(2) : "") +
                 " · n=" +
-                lastChunkLenRef.current;
+                lastChunkLenRef.current +
+                sourceTagRef.current;
 
               // Limpa a nota exibida (silencio por HOLD_MS ou ruido por HOLD_SOUND_MS)
               const clearNote = (text: string) => {
@@ -272,7 +281,8 @@ export function usePitchDetectorFinal(
                       "RMS " +
                       rms.toFixed(5) +
                       " · n=" +
-                      lastChunkLenRef.current,
+                      lastChunkLenRef.current +
+                      sourceTagRef.current,
                   }));
                 }
                 return;
@@ -305,7 +315,8 @@ export function usePitchDetectorFinal(
                       " · clar " +
                       clarity.toFixed(2) +
                       " · n=" +
-                      lastChunkLenRef.current,
+                      lastChunkLenRef.current +
+                      sourceTagRef.current,
                   }));
                 }
                 return;
@@ -355,12 +366,23 @@ export function usePitchDetectorFinal(
                     " · clar " +
                     clarity.toFixed(2) +
                     " · n=" +
-                    lastChunkLenRef.current,
+                    lastChunkLenRef.current +
+                    sourceTagRef.current,
                 });
               }
             }
           },
         });
+        // O Android pode nao honrar "unprocessed" (aparelho sem suporte): o
+        // resultado diz a fonte que abriu de fato
+        const used = result?.androidAudioSource ?? "mic";
+        TestRecorder.setSource(used);
+        sourceTagRef.current =
+          audioSource === "mic"
+            ? ""
+            : used === audioSource
+              ? " · cru"
+              : " · cru indisponivel";
       } catch (error) {
         console.error("Recording error:", error);
         const msg = error instanceof Error ? error.message : String(error);
@@ -385,7 +407,7 @@ export function usePitchDetectorFinal(
       filteredRef.current = new Float32Array(0);
       lpStateRef.current = { x1: 0, x2: 0, y1: 0, y2: 0 };
     };
-  }, [isActive, refA4, noiseThreshold, stabilize, sensitivity]);
+  }, [isActive, refA4, noiseThreshold, stabilize, sensitivity, audioSource]);
 
   useEffect(() => {
     if (Platform.OS !== "web") return;

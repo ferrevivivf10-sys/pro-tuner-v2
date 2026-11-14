@@ -15,6 +15,7 @@ export interface TunerSettings {
   ringStyle: RingStyleName;
   testMode: boolean; // mostra o botao de gravar teste e o texto de diagnostico
   testLowpass: boolean; // modo de teste: filtro passa-baixa de 1500 Hz no microfone
+  testUnprocessed: boolean; // modo de teste: fonte de audio sem processamento no microfone
 }
 
 const STORAGE_KEY = "@pro_tuner_settings";
@@ -26,6 +27,7 @@ const DEFAULT_SETTINGS: TunerSettings = {
   ringStyle: DEFAULT_RING_STYLE,
   testMode: false,
   testLowpass: false,
+  testUnprocessed: false,
 };
 
 export class SettingsManager {
@@ -60,6 +62,7 @@ export class SettingsManager {
             : DEFAULT_SETTINGS.ringStyle,
         testMode: parsed.testMode === true,
         testLowpass: parsed.testLowpass === true,
+        testUnprocessed: parsed.testUnprocessed === true,
       };
     } catch (error) {
       console.error("SettingsManager.loadSettings error:", error);
@@ -106,5 +109,9 @@ export class SettingsManager {
 
   static async setTestLowpass(value: boolean): Promise<void> {
     await this.updateField("testLowpass", value);
+  }
+
+  static async setTestUnprocessed(value: boolean): Promise<void> {
+    await this.updateField("testUnprocessed", value);
   }
 }

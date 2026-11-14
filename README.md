@@ -76,9 +76,13 @@ som sumir.
   mic ↔ cabo a captura reinicia sozinha.
 - No cabo: gate 0,003 e clareza mínima 0,6, sem as regras de estabilidade.
 
-Limitação: a `@siteed/audio-studio` 3.x não permite escolher a fonte de áudio
-"sem processamento" do Android (só na 4.x, em beta). Medido: o microfone já
-chega praticamente cru.
+Fonte de áudio: por padrão o mic usa a fonte `MIC` do Android, onde o fabricante
+pode aplicar supressão de ruído e ganho automático (medido: na maioria dos
+aparelhos já chega praticamente cru). Em **Ajustes → Modo de teste** dá para
+pedir a fonte **sem processamento** (`UNPROCESSED`, via `android.audioSource`
+da `@siteed/audio-studio` 4.0 beta). Se o aparelho não suportar, o Android abre
+a `MIC`; os dados técnicos mostram "cru" ou "cru indisponivel" e o `.csv` do
+teste registra `fonte_pedida` e `fonte_usada`.
 
 ---
 

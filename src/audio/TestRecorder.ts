@@ -15,9 +15,15 @@ let pcm = new Int16Array(0);
 let total = 0;
 let rows: string[] = [];
 let meta = "";
+let sourceUsed = "?"; // fonte de audio que o Android abriu de fato (mic/unprocessed)
 
 export const TestRecorder = {
   isRecording: () => recording,
+
+  // Chamado pelo detector quando a gravacao comeca
+  setSource(name: string) {
+    sourceUsed = name;
+  },
   seconds: () => total / SAMPLE_RATE,
 
   start(info: string) {
@@ -91,6 +97,8 @@ export const TestRecorder = {
     const csv =
       "# " +
       meta +
+      " fonte_usada=" +
+      sourceUsed +
       "\n" +
       "amostra_fim,rms,freq_crua,clareza,status,freq_saida\n" +
       rows.join("\n") +
