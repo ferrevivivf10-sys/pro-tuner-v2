@@ -49,12 +49,36 @@ const CHANNEL_ARC = { arcR: 0.725, arcW: 0.044 };
 
 export const RING_STYLES: Record<RingStyleName, RingStyleDef> = {
   minimalista: { label: "Minimalista", image: null, ...BAND_ARC },
-  aco: { label: "Aço", image: require("../../assets/images/rings/aco.png"), ...BAND_ARC },
-  ouro: { label: "Ouro", image: require("../../assets/images/rings/ouro.png"), ...BAND_ARC },
-  grafite: { label: "Grafite", image: require("../../assets/images/rings/grafite.png"), ...BAND_ARC },
-  "aco-escala": { label: "Aço escala", image: require("../../assets/images/rings/aco-escala.png"), ...CHANNEL_ARC },
-  "ouro-escala": { label: "Ouro escala", image: require("../../assets/images/rings/ouro-escala.png"), ...CHANNEL_ARC },
-  "grafite-escala": { label: "Grafite escala", image: require("../../assets/images/rings/grafite-escala.png"), ...CHANNEL_ARC },
+  aco: {
+    label: "Aço",
+    image: require("../../assets/images/rings/aco.png"),
+    ...BAND_ARC,
+  },
+  ouro: {
+    label: "Ouro",
+    image: require("../../assets/images/rings/ouro.png"),
+    ...BAND_ARC,
+  },
+  grafite: {
+    label: "Grafite",
+    image: require("../../assets/images/rings/grafite.png"),
+    ...BAND_ARC,
+  },
+  "aco-escala": {
+    label: "Aço escala",
+    image: require("../../assets/images/rings/aco-escala.png"),
+    ...CHANNEL_ARC,
+  },
+  "ouro-escala": {
+    label: "Ouro escala",
+    image: require("../../assets/images/rings/ouro-escala.png"),
+    ...CHANNEL_ARC,
+  },
+  "grafite-escala": {
+    label: "Grafite escala",
+    image: require("../../assets/images/rings/grafite-escala.png"),
+    ...CHANNEL_ARC,
+  },
 };
 
 export const RING_STYLE_ORDER: RingStyleName[] = [
@@ -97,7 +121,13 @@ const ARC_TO = -55;
 // O minimalista foi desenhado para um raio de 160; as medidas escalam a partir dai.
 const MINIMAL_REF_R = 160;
 
-function arcPath(cx: number, cy: number, r: number, a0: number, a1: number): string {
+function arcPath(
+  cx: number,
+  cy: number,
+  r: number,
+  a0: number,
+  a1: number,
+): string {
   const pt = (deg: number) => {
     const rad = (deg * Math.PI) / 180;
     return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
@@ -139,7 +169,7 @@ function TunerDialComponent({ outerR, style, accent }: TunerDialProps) {
           y2={c + (outerR - len) * Math.sin(rad)}
           stroke={isCenter ? accent.color : isQuarter ? "#AAAAAA" : "#3A3A3A"}
           strokeWidth={Math.max(w, 0.5)}
-        />
+        />,
       );
     }
     return (

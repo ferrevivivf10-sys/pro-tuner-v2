@@ -62,7 +62,8 @@ const config: ExpoConfig = {
         enableNotifications: false,
         enablePhoneStateHandling: false,
         iosConfig: {
-          microphoneUsageDescription: "O Pro Tuner usa o microfone para detectar a afinação.",
+          microphoneUsageDescription:
+            "O Pro Tuner usa o microfone para detectar a afinação.",
         },
       },
     ],

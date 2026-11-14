@@ -31,7 +31,12 @@ function classify(subject) {
 }
 
 const commits = getVersionCommits();
-const lines = ["# Changelog — Pro Tuner", "", "Gerado automaticamente a cada build. Mais recente primeiro.", ""];
+const lines = [
+  "# Changelog — Pro Tuner",
+  "",
+  "Gerado automaticamente a cada build. Mais recente primeiro.",
+  "",
+];
 
 for (let i = commits.length - 1; i >= 0; i--) {
   const c = commits[i];

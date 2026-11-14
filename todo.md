@@ -29,18 +29,19 @@ Estado em 14/11/2026 · versão 1.0.53 na `main`.
 - [x] Testes automatizados (`npm test`): detector com trechos reais + lógica do cabo
 - [x] Build checa tipos (`tsc`) antes dos testes
 - [x] Sobras do template e docs antigos removidos
+- [x] Estabilidade do mic separada do hook (`src/audio/stability.ts`) e testada
+- [x] `noiseThreshold` sem uso removido das configurações
+- [x] Lint sem avisos e código formatado com Prettier
+- [x] Acessibilidade (TalkBack) no Afinador, em Ajustes e nas Entradas de áudio
+- [x] Actions do workflow atualizadas (Node 24)
 
 ## Pendente
 
 - [ ] Assinatura própria do APK (chave + segredo no GitHub)
-- [ ] Acessibilidade no Afinador e em Ajustes
-- [ ] Separar a lógica de estabilidade do hook e testar
-- [ ] `noiseThreshold` é salvo mas não usado (gate fixo no código): remover ou usar
-- [ ] Atualizar actions do workflow (avisos de Node 20)
-- [ ] Fonte de áudio sem processamento: só na `@siteed/audio-studio` 4.x (beta)
 
 ## Decidido não fazer (por enquanto)
 
+- Fonte de áudio sem processamento (`UNPROCESSED`): testada no branch `claude/audio-unprocessed` com a `@siteed/audio-studio` 4.0 beta (+ patch para o SDK 54). No celular de teste (14/11) o Android não suporta e abre a `MIC`; a detecção já era boa nas 6 cordas. Retomar quando a 4.x sair estável ou o app for para o SDK 57
 - Juiz SWIPE: empatou com barulho real (5 consertos, 5 estragos)
 - YIN, escolha pela sequência e janela maior (3072/4096): sem ganho
 - Filtro 1500 Hz como padrão: mostra nota nas pausas com ruído

@@ -38,7 +38,6 @@ export default function SettingsScreen() {
   const [selectedCalib, setSelectedCalib] = useState(440);
   const [selectedTuning, setSelectedTuning] = useState<TuningName>("Standard");
   const [sensitivity, setSensitivity] = useState(0.7);
-  const [noiseThreshold, setNoiseThreshold] = useState(0.02);
   const [ringStyle, setRingStyle] = useState<RingStyleName>(DEFAULT_RING_STYLE);
   const [testMode, setTestMode] = useState(false);
   const [testLowpass, setTestLowpass] = useState(false);
@@ -51,7 +50,6 @@ export default function SettingsScreen() {
         setSelectedCalib(settings.refA4);
         setSelectedTuning(settings.selectedTuning as TuningName);
         setSensitivity(settings.sensitivity);
-        setNoiseThreshold(settings.noiseThreshold);
         setRingStyle(settings.ringStyle);
         setTestMode(settings.testMode);
         setTestLowpass(settings.testLowpass);
@@ -68,7 +66,10 @@ export default function SettingsScreen() {
     try {
       await SettingsManager.setRefA4(value);
       setSelectedCalib(value);
-      Alert.alert("✓ Calibração Salva", `Referência A4 definida para ${value} Hz`);
+      Alert.alert(
+        "✓ Calibração Salva",
+        `Referência A4 definida para ${value} Hz`,
+      );
     } catch (error) {
       console.error("Erro ao salvar calibração:", error);
       Alert.alert("Erro", "Não foi possível salvar a calibração");
@@ -126,22 +127,18 @@ export default function SettingsScreen() {
     }
   };
 
-  // Salvar limiar de ruído
-  const saveNoiseThreshold = async (value: number) => {
-    try {
-      await SettingsManager.setNoiseThreshold(value);
-      setNoiseThreshold(value);
-    } catch (error) {
-      console.error("Erro ao salvar limiar de ruído:", error);
-    }
-  };
-
   return (
     <ScreenContainer className="bg-background">
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>⚙️ CONFIGURAÇÕES</Text>
+          <Text
+            style={styles.title}
+            accessibilityRole="header"
+            accessibilityLabel="Configurações"
+          >
+            ⚙️ CONFIGURAÇÕES
+          </Text>
         </View>
 
         {/* Entradas de áudio (subtela) */}
@@ -153,15 +150,21 @@ export default function SettingsScreen() {
           accessibilityLabel="Entradas de áudio"
         >
           <View>
-            <Text style={styles.sectionTitle}>Entradas de áudio</Text>
-            <Text style={styles.linkDescription}>Microfone ou cabo do instrumento</Text>
+            <Text style={styles.sectionTitle} accessibilityRole="header">
+              Entradas de áudio
+            </Text>
+            <Text style={styles.linkDescription}>
+              Microfone ou cabo do instrumento
+            </Text>
           </View>
           <Text style={styles.linkArrow}>›</Text>
         </TouchableOpacity>
 
         {/* Seção de Calibração */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Calibração A4</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">
+            Calibração A4
+          </Text>
           <Text style={styles.sectionDescription}>
             Selecione a frequência de referência para o A4
           </Text>
@@ -175,6 +178,9 @@ export default function SettingsScreen() {
                   selectedCalib === value && styles.optionButtonActive,
                 ]}
                 onPress={() => saveCalibration(value)}
+                accessibilityRole="radio"
+                accessibilityLabel={value + " hertz"}
+                accessibilityState={{ checked: selectedCalib === value }}
               >
                 <Text
                   style={[
@@ -194,7 +200,9 @@ export default function SettingsScreen() {
 
         {/* Seção de Afinações */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Modo de Afinação</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">
+            Modo de Afinação
+          </Text>
           <Text style={styles.sectionDescription}>
             Escolha o padrão de afinação do seu instrumento
           </Text>
@@ -208,13 +216,15 @@ export default function SettingsScreen() {
                   selectedTuning === tuningName && styles.tuningCardActive,
                 ]}
                 onPress={() => saveTuning(tuningName)}
+                accessibilityRole="radio"
+                accessibilityLabel={TUNING_LABELS[tuningName]}
+                accessibilityState={{ checked: selectedTuning === tuningName }}
               >
                 <View style={styles.tuningHeader}>
                   <Text
                     style={[
                       styles.tuningName,
-                      selectedTuning === tuningName &&
-                        styles.tuningNameActive,
+                      selectedTuning === tuningName && styles.tuningNameActive,
                     ]}
                   >
                     {TUNING_LABELS[tuningName]}
@@ -245,7 +255,9 @@ export default function SettingsScreen() {
 
         {/* Seção de Aparência */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Aparência</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">
+            Aparência
+          </Text>
           <Text style={styles.sectionDescription}>
             Escolha o aro do mostrador. A cor indica a afinação e não muda com o
             estilo.
@@ -260,8 +272,15 @@ export default function SettingsScreen() {
                   style={[styles.ringCard, isActive && styles.ringCardActive]}
                   onPress={() => saveRingStyle(key)}
                   activeOpacity={0.8}
+                  accessibilityRole="radio"
+                  accessibilityLabel={"Aro " + RING_STYLES[key].label}
+                  accessibilityState={{ checked: isActive }}
                 >
-                  <View style={styles.ringThumb}>
+                  <View
+                    style={styles.ringThumb}
+                    importantForAccessibility="no-hide-descendants"
+                    accessibilityElementsHidden
+                  >
                     <TunerDial outerR={34} style={key} accent={RING_IN_TUNE} />
                   </View>
                   <Text
@@ -282,7 +301,9 @@ export default function SettingsScreen() {
 
         {/* Seção de Sensibilidade */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Sensibilidade</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">
+            Sensibilidade
+          </Text>
           <Text style={styles.sectionDescription}>
             Vale para o microfone do celular. Alta pega notas fracas em lugar
             silencioso; Baixa só aceita notas bem limpas, ideal com muito ruído.
@@ -300,6 +321,9 @@ export default function SettingsScreen() {
                     isActive && styles.optionButtonActive,
                   ]}
                   onPress={() => saveSensitivity(opt.value)}
+                  accessibilityRole="radio"
+                  accessibilityLabel={"Sensibilidade " + opt.label}
+                  accessibilityState={{ checked: isActive }}
                 >
                   <Text
                     style={[
@@ -318,7 +342,9 @@ export default function SettingsScreen() {
 
         {/* Seção do Modo de teste */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Modo de teste</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">
+            Modo de teste
+          </Text>
           <Text style={styles.sectionDescription}>
             Mostra no afinador o botão de gravar teste (áudio + leituras) e os
             dados técnicos da captação.
@@ -330,12 +356,23 @@ export default function SettingsScreen() {
               return (
                 <TouchableOpacity
                   key={String(value)}
-                  style={[styles.optionButton, isActive && styles.optionButtonActive]}
+                  style={[
+                    styles.optionButton,
+                    isActive && styles.optionButtonActive,
+                  ]}
                   onPress={() => saveTestMode(value)}
-                  accessibilityRole="button"
-                  accessibilityLabel={"Modo de teste " + (value ? "ligado" : "desligado")}
+                  accessibilityRole="radio"
+                  accessibilityLabel={
+                    "Modo de teste " + (value ? "ligado" : "desligado")
+                  }
+                  accessibilityState={{ checked: isActive }}
                 >
-                  <Text style={[styles.optionText, isActive && styles.optionTextActive]}>
+                  <Text
+                    style={[
+                      styles.optionText,
+                      isActive && styles.optionTextActive,
+                    ]}
+                  >
                     {value ? "Ligado" : "Desligado"}
                   </Text>
                   {isActive && <Text style={styles.checkmark}>✓</Text>}
@@ -356,12 +393,23 @@ export default function SettingsScreen() {
                   return (
                     <TouchableOpacity
                       key={String(value)}
-                      style={[styles.optionButton, isActive && styles.optionButtonActive]}
+                      style={[
+                        styles.optionButton,
+                        isActive && styles.optionButtonActive,
+                      ]}
                       onPress={() => saveTestLowpass(value)}
-                      accessibilityRole="button"
-                      accessibilityLabel={"Filtro de agudos " + (value ? "ligado" : "desligado")}
+                      accessibilityRole="radio"
+                      accessibilityLabel={
+                        "Filtro de agudos " + (value ? "ligado" : "desligado")
+                      }
+                      accessibilityState={{ checked: isActive }}
                     >
-                      <Text style={[styles.optionText, isActive && styles.optionTextActive]}>
+                      <Text
+                        style={[
+                          styles.optionText,
+                          isActive && styles.optionTextActive,
+                        ]}
+                      >
                         {value ? "Ligado" : "Desligado"}
                       </Text>
                       {isActive && <Text style={styles.checkmark}>✓</Text>}
@@ -377,16 +425,17 @@ export default function SettingsScreen() {
         <View style={styles.infoSection}>
           <Text style={styles.infoTitle}>ℹ️ Informações</Text>
           <Text style={styles.infoText}>
-            • A calibração padrão é 440 Hz (A4){"\n"}
-            • A afinação mais comum é a Padrão (Mi Lá Ré Sol Si Mi){"\n"}
-            • Altere conforme necessário para seu instrumento
+            • A calibração padrão é 440 Hz (A4){"\n"}• A afinação mais comum é a
+            Padrão (Mi Lá Ré Sol Si Mi){"\n"}• Altere conforme necessário para
+            seu instrumento
           </Text>
         </View>
 
         {/* Versão */}
         <View style={styles.footer}>
           <Text style={styles.versionText}>
-            Pro Tuner v{Constants.expoConfig?.version ?? "?"} · {Constants.expoConfig?.extra?.commit ?? "dev"}
+            Pro Tuner v{Constants.expoConfig?.version ?? "?"} ·{" "}
+            {Constants.expoConfig?.extra?.commit ?? "dev"}
           </Text>
         </View>
       </ScrollView>

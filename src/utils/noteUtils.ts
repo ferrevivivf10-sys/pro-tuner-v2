@@ -2,7 +2,20 @@
  * Utilitários para conversão entre frequência e notas musicais
  */
 
-export const NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+export const NOTES = [
+  "C",
+  "C#",
+  "D",
+  "D#",
+  "E",
+  "F",
+  "F#",
+  "G",
+  "G#",
+  "A",
+  "A#",
+  "B",
+];
 
 export interface NoteInfo {
   noteName: string;
@@ -20,7 +33,7 @@ export interface NoteInfo {
  */
 export const getNoteFromFreq = (
   frequency: number,
-  referenceA4: number = 440
+  referenceA4: number = 440,
 ): NoteInfo | null => {
   if (!frequency || frequency <= 0) return null;
 
@@ -43,7 +56,10 @@ export const getNoteFromFreq = (
 /**
  * Converte MIDI note number para frequência em Hz
  */
-export const getFreqFromMidi = (midi: number, referenceA4: number = 440): number => {
+export const getFreqFromMidi = (
+  midi: number,
+  referenceA4: number = 440,
+): number => {
   return referenceA4 * Math.pow(2, (midi - 69) / 12);
 };
 
@@ -75,7 +91,7 @@ export const TUNING_LABELS: Record<TuningName, string> = {
  */
 export const findClosestStringInTuning = (
   frequency: number,
-  tuning: number[]
+  tuning: number[],
 ): { stringIndex: number; targetFreq: number; cents: number } | null => {
   let closest = { stringIndex: -1, distance: Infinity, targetFreq: 0 };
 

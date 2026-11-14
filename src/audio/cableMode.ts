@@ -21,7 +21,7 @@ export type DevicePoller = {
 
 export function createDevicePoller(
   refresh: () => Promise<unknown>,
-  intervalMs: number
+  intervalMs: number,
 ): DevicePoller {
   let timer: ReturnType<typeof setInterval> | null = null;
   let busy = false;

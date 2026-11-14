@@ -9,7 +9,14 @@
  * - Suavizacao: hold da nota (400ms) e media movel de cents
  */
 
-import React, { useEffect, useRef, memo, useMemo, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useRef,
+  memo,
+  useMemo,
+  useState,
+  useCallback,
+} from "react";
 import {
   View,
   Text,
@@ -47,11 +54,11 @@ const BASE_Y = RING_CY - ((CHORD_COUNT - 1) * CHORD_SPACING) / 2;
 const STRING_AREA_WIDTH = SCREEN_WIDTH;
 
 // ===== Parametros de SUAVIZACAO =====
-const NOTE_HOLD_MS = 400;        // tempo que a nota permanece apos o som sumir
-const CENTS_SMOOTH_SIZE = 5;     // media movel das ultimas N leituras de cents
-const LOCK_HIT_HEIGHT = 40;      // altura da area de toque de cada corda (modo manual)
-const STRING_GUARD_CENTS = 250;  // ~metade da distancia entre cordas; acima disso o sinal esta longe de qualquer corda
-const IN_TUNE_CENTS = 5;         // |cents| < isso => afinado
+const NOTE_HOLD_MS = 400; // tempo que a nota permanece apos o som sumir
+const CENTS_SMOOTH_SIZE = 5; // media movel das ultimas N leituras de cents
+const LOCK_HIT_HEIGHT = 40; // altura da area de toque de cada corda (modo manual)
+const STRING_GUARD_CENTS = 250; // ~metade da distancia entre cordas; acima disso o sinal esta longe de qualquer corda
+const IN_TUNE_CENTS = 5; // |cents| < isso => afinado
 
 // Cor do aro: e FUNCIONAL, nao decorativa. Sem sinal fica apagado (nao faz
 // sentido gritar "desafinado" com o app parado), vermelho enquanto desafinado
@@ -143,6 +150,30 @@ function parseStringLabel(label: string): { note: string; octave: number } {
   return { note: match[1], octave: parseInt(match[2], 10) };
 }
 
+// Nome falado da nota para o leitor de tela, ex: "Eb2" -> "Mi bemol 2"
+const SPOKEN_NOTES: Record<string, string> = {
+  C: "Dó",
+  D: "Ré",
+  E: "Mi",
+  F: "Fá",
+  G: "Sol",
+  A: "Lá",
+  B: "Si",
+};
+
+export function spokenStringName(label: string): string {
+  const { note, octave } = parseStringLabel(label);
+  const base = SPOKEN_NOTES[note[0]] ?? note;
+  const accidental =
+    note[1] === "b" ? " bemol" : note[1] === "#" ? " sustenido" : "";
+  return base + accidental + (octave > 0 ? " " + octave : "");
+}
+
+// Numero da corda como o violonista conta: 6a = mais grave, 1a = mais aguda
+function stringOrdinal(index: number): string {
+  return CHORD_COUNT - index + "ª corda";
+}
+
 // ===== Hook do afinador por corda =====
 // A partir da frequencia crua, escolhe a corda alvo (a travada manualmente ou a
 // mais proxima em cents) e devolve os cents suavizados contra ela. Nao altera a
@@ -153,7 +184,7 @@ function useStringTuner(
   confidence: number,
   confidenceMin: number,
   calStringFreqs: number[],
-  lockedIndex: number | null
+  lockedIndex: number | null,
 ) {
   const [display, setDisplay] = useState<{
     index: number | null;
@@ -304,7 +335,9 @@ const StringLinesFullWidth = memo(
                 x={10}
                 y={y - 6}
                 fontSize={isActive ? "13" : isTargeted ? "12" : "11"}
-                fill={isActive ? displayColor : isTargeted ? stringColor : "#666666"}
+                fill={
+                  isActive ? displayColor : isTargeted ? stringColor : "#666666"
+                }
                 textAnchor="start"
                 fontWeight={isActive || isTargeted ? "700" : "600"}
                 opacity={isActive ? 1 : isTargeted ? 0.9 : 0.7}
@@ -317,7 +350,7 @@ const StringLinesFullWidth = memo(
         })}
       </Svg>
     );
-  }
+  },
 );
 StringLinesFullWidth.displayName = "StringLinesFullWidth";
 
@@ -325,21 +358,34 @@ StringLinesFullWidth.displayName = "StringLinesFullWidth";
 // Fica numa camada separada da SVG (que e pointerEvents="none").
 function StringHitTargets({
   tuningNames,
+  lockedStringIndex,
   onStringPress,
 }: {
   tuningNames: string[];
+  lockedStringIndex: number | null;
   onStringPress: (index: number) => void;
 }) {
   return (
     <View style={styles.hitLayer} pointerEvents="box-none">
-      {tuningNames.map((_, i) => {
+      {tuningNames.map((name, i) => {
         const y = BASE_Y + i * CHORD_SPACING;
+        const locked = lockedStringIndex === i;
         return (
           <TouchableOpacity
             key={i}
             style={[styles.hitRow, { top: y - LOCK_HIT_HEIGHT / 2 }]}
             activeOpacity={0.5}
             onPress={() => onStringPress(i)}
+            accessibilityRole="button"
+            accessibilityLabel={
+              stringOrdinal(i) + ", " + spokenStringName(name)
+            }
+            accessibilityHint={
+              locked
+                ? "Toque para voltar à detecção automática"
+                : "Toque para afinar só esta corda"
+            }
+            accessibilityState={{ selected: locked }}
           />
         );
       })}
@@ -361,19 +407,21 @@ function PitchLabDisplayComponent({
 
   const confidenceMin = useMemo(
     () => confidenceThreshold(sensitivity),
-    [sensitivity]
+    [sensitivity],
   );
 
   // Frequencias das cordas ja corrigidas pela calibracao A4 escolhida.
   const calStringFreqs = useMemo(
     () => tuningNames.map((n) => stringFreq(n, refA4)),
-    [tuningNames, refA4]
+    [tuningNames, refA4],
   );
 
   // ===== Modo por corda (manual) =====
   // Tocar no nome de uma corda trava a leitura naquela corda especifica;
   // tocar de novo (ou no chip "AUTO") volta para deteccao automatica.
-  const [lockedStringIndex, setLockedStringIndex] = useState<number | null>(null);
+  const [lockedStringIndex, setLockedStringIndex] = useState<number | null>(
+    null,
+  );
 
   useEffect(() => {
     setLockedStringIndex(null);
@@ -390,7 +438,7 @@ function PitchLabDisplayComponent({
     confidence,
     confidenceMin,
     calStringFreqs,
-    lockedStringIndex
+    lockedStringIndex,
   );
 
   const activeStringIndex = tuner.index;
@@ -417,19 +465,47 @@ function PitchLabDisplayComponent({
         ? { text: "AFROUXAR", color: "#FFB300", arrow: " ▼" }
         : { text: "APERTAR", color: "#FFB300", arrow: " ▲" };
 
+  // Resumo para o leitor de tela. So muda quando muda a corda ou a acao (nao
+  // a cada leitura de cents), para o TalkBack nao falar sem parar.
+  const activeName =
+    activeStringIndex != null
+      ? spokenStringName(tuningNames[activeStringIndex])
+      : "";
+  const spokenSummary = hasSignal
+    ? activeName + ", " + (action?.text.toLowerCase() ?? "")
+    : isLocked
+      ? "Corda travada: " + activeName + ". Toque a corda"
+      : "Sem nota. Toque uma corda";
+  const centsRounded = Math.round(displayCents);
+  const spokenCents =
+    centsRounded === 0
+      ? "0 cents"
+      : Math.abs(centsRounded) +
+        (Math.abs(centsRounded) === 1 ? " cent " : " cents ") +
+        (centsRounded > 0 ? "acima" : "abaixo");
+
   return (
     <View style={styles.wrapper}>
-      {/* Nota + oitava (GRANDE) */}
-      <View style={styles.noteRow}>
+      {/* Nota + oitava (GRANDE). Para o leitor de tela vira um resumo falado
+          que se anuncia sozinho quando muda (live region). */}
+      <View
+        style={styles.noteRow}
+        accessible
+        accessibilityRole="text"
+        accessibilityLabel={spokenSummary}
+        accessibilityLiveRegion="polite"
+      >
         <Text
+          maxFontSizeMultiplier={1}
           style={[
             styles.noteChar,
             {
-              color: !hasSignal && !isLocked
-                ? "#2A2A2A"
-                : displayInTune
-                  ? "#00E676"
-                  : "#FFFFFF",
+              color:
+                !hasSignal && !isLocked
+                  ? "#2A2A2A"
+                  : displayInTune
+                    ? "#00E676"
+                    : "#FFFFFF",
             },
           ]}
         >
@@ -437,6 +513,7 @@ function PitchLabDisplayComponent({
         </Text>
         {(hasSignal || isLocked) && displayOctave > 0 && (
           <Text
+            maxFontSizeMultiplier={1}
             style={[
               styles.octaveChar,
               { color: displayInTune ? "#00C853" : "#00BCD4" },
@@ -453,7 +530,12 @@ function PitchLabDisplayComponent({
       {/* Area das cordas (ponta a ponta) + anel no fundo */}
       <View style={styles.stringArea}>
         {/* Anel central no FUNDO (estatico, memoizado) */}
-        <View style={styles.ringLayer} pointerEvents="none">
+        <View
+          style={styles.ringLayer}
+          pointerEvents="none"
+          importantForAccessibility="no-hide-descendants"
+          accessibilityElementsHidden
+        >
           <TunerDial
             outerR={RING_R}
             style={ringStyle ?? DEFAULT_RING_STYLE}
@@ -462,7 +544,12 @@ function PitchLabDisplayComponent({
         </View>
 
         {/* Cordas atravessam a tela toda, POR CIMA do anel */}
-        <View style={styles.stringsLayer} pointerEvents="none">
+        <View
+          style={styles.stringsLayer}
+          pointerEvents="none"
+          importantForAccessibility="no-hide-descendants"
+          accessibilityElementsHidden
+        >
           <StringLinesFullWidth
             centsValue={hasSignal ? displayCents : 0}
             tuningNames={tuningNames}
@@ -473,7 +560,11 @@ function PitchLabDisplayComponent({
         </View>
 
         {/* Toque no nome de uma corda para travar nela (modo manual) */}
-        <StringHitTargets tuningNames={tuningNames} onStringPress={handleStringPress} />
+        <StringHitTargets
+          tuningNames={tuningNames}
+          lockedStringIndex={lockedStringIndex}
+          onStringPress={handleStringPress}
+        />
 
         {/* Chip para voltar ao modo automatico */}
         {isLocked && (
@@ -481,6 +572,8 @@ function PitchLabDisplayComponent({
             style={styles.modeBadge}
             onPress={() => setLockedStringIndex(null)}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Voltar à detecção automática da corda"
           >
             <Text style={styles.modeBadgeText}>{"⤴"} AUTO</Text>
           </TouchableOpacity>
@@ -488,7 +581,12 @@ function PitchLabDisplayComponent({
 
         {/* Indicador de acao (AFROUXAR / APERTAR / AFINADO) */}
         {action && (
-          <View style={styles.actionWrap} pointerEvents="none">
+          <View
+            style={styles.actionWrap}
+            pointerEvents="none"
+            importantForAccessibility="no-hide-descendants"
+            accessibilityElementsHidden
+          >
             <Text style={[styles.actionText, { color: action.color }]}>
               {action.text}
               {action.arrow}
@@ -500,6 +598,7 @@ function PitchLabDisplayComponent({
         {hasSignal && (
           <View style={styles.centsCorner} pointerEvents="none">
             <Text
+              accessibilityLabel={spokenCents}
               style={[
                 styles.centsCornerText,
                 { color: displayInTune ? "#00E676" : "#FF5252" },
@@ -517,6 +616,12 @@ function PitchLabDisplayComponent({
         style={styles.tuningSelector}
         onPress={onTuningPress}
         activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={
+          "Afinação: " +
+          (TUNING_LABELS[selectedTuning as TuningName] ?? selectedTuning)
+        }
+        accessibilityHint="Abre a lista de afinações"
       >
         <Text style={styles.tuningText}>
           {TUNING_LABELS[selectedTuning as TuningName] ?? selectedTuning}

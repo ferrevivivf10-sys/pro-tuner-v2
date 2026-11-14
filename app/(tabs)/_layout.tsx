@@ -15,7 +15,7 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: colors.tint,
-        tabBarInactiveTintColor: "#555555",
+        tabBarInactiveTintColor: "#8A8A8A", // contraste minimo 4.5:1 no preto
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarStyle: {
@@ -32,14 +32,18 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "Afinador",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="waveform" color={color} />,
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="waveform" color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: "Ajustes",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="gearshape.fill" color={color} />
+          ),
         }}
       />
     </Tabs>
