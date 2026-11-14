@@ -36,7 +36,6 @@ Scripts disponíveis:
 | `npm run check` | Type-check com `tsc --noEmit` |
 | `npm run lint` | ESLint (`expo lint`) |
 | `npm run format` | Prettier |
-| `npm run qr` | Gera QR code de conexão (`scripts/generate_qr.mjs`) |
 
 ---
 
