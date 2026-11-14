@@ -250,7 +250,15 @@ export default function TunerScreen() {
     <ScreenContainer containerClassName="bg-black">
       <View style={styles.screen}>
         <View style={styles.header}>
-          <View style={styles.statusRow}>
+          <View
+            style={styles.statusRow}
+            accessible
+            accessibilityLabel={
+              "Afinador " +
+              (isActive ? "ativo" : "pausado") +
+              (isCable ? ", entrada pelo cabo" : ", entrada pelo microfone")
+            }
+          >
             <View
               style={[
                 styles.dot,
@@ -262,7 +270,14 @@ export default function TunerScreen() {
               {isCable ? " · Cabo" : ""}
             </Text>
           </View>
-          <Text style={styles.calibText}>A4 = {settings?.refA4 ?? 440} Hz</Text>
+          <Text
+            style={styles.calibText}
+            accessibilityLabel={
+              "Calibração: Lá 4 em " + (settings?.refA4 ?? 440) + " hertz"
+            }
+          >
+            A4 = {settings?.refA4 ?? 440} Hz
+          </Text>
         </View>
 
         <View style={styles.displayArea}>
@@ -285,6 +300,19 @@ export default function TunerScreen() {
               style={[styles.testBtn, testSeconds !== null && styles.testBtnOn]}
               onPress={toggleTest}
               disabled={testSaving}
+              accessibilityRole="button"
+              accessibilityLabel={
+                testSaving
+                  ? "Salvando teste"
+                  : testSeconds !== null
+                    ? "Parar e salvar teste, " +
+                      Math.floor(testSeconds) +
+                      " de " +
+                      TEST_MAX_SECONDS +
+                      " segundos"
+                    : "Gravar teste"
+              }
+              accessibilityState={{ disabled: testSaving, busy: testSaving }}
             >
               <Text
                 style={[
@@ -313,6 +341,8 @@ export default function TunerScreen() {
           style={[styles.toggleBtn, isActive && styles.toggleBtnActive]}
           onPress={toggleTuner}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={isActive ? "Pausar afinador" : "Retomar afinador"}
         >
           <Text style={styles.toggleBtnText}>
             {isActive ? "PAUSAR" : "RETOMAR"}
@@ -330,9 +360,12 @@ export default function TunerScreen() {
           style={styles.modalOverlay}
           activeOpacity={1}
           onPress={() => setTuningModalVisible(false)}
+          accessible={false}
         >
-          <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Selecionar Afinação</Text>
+          <View style={styles.modalSheet} accessibilityViewIsModal>
+            <Text style={styles.modalTitle} accessibilityRole="header">
+              Selecionar Afinação
+            </Text>
             {TUNING_OPTIONS.map((t) => (
               <TouchableOpacity
                 key={t}
@@ -342,6 +375,11 @@ export default function TunerScreen() {
                     styles.modalItemActive,
                 ]}
                 onPress={() => selectTuning(t)}
+                accessibilityRole="radio"
+                accessibilityLabel={TUNING_LABELS[t as TuningName]}
+                accessibilityState={{
+                  checked: (settings?.selectedTuning ?? "Standard") === t,
+                }}
               >
                 <Text
                   style={[
@@ -393,7 +431,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: 0.5,
   },
-  calibText: { color: "#555", fontSize: 11, letterSpacing: 0.5 },
+  calibText: { color: "#8A8A8A", fontSize: 11, letterSpacing: 0.5 },
   displayArea: { flex: 1, justifyContent: "center", alignItems: "center" },
   testBtn: {
     paddingHorizontal: 14,

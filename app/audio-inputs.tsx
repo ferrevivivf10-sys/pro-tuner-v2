@@ -45,7 +45,9 @@ export default function AudioInputsScreen() {
           <Text style={styles.back}>‹ Ajustes</Text>
         </Pressable>
 
-        <Text style={styles.title}>Entradas de áudio</Text>
+        <Text style={styles.title} accessibilityRole="header">
+          Entradas de áudio
+        </Text>
 
         <View
           style={[styles.status, cable ? styles.statusCable : styles.statusMic]}
