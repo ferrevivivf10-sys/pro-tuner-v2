@@ -1,149 +1,175 @@
-# 🎸 Pro Tuner
+# Pro Tuner
 
-Afinador cromático para guitarra, baixo e outros instrumentos de corda, feito
-em **React Native + Expo (SDK 54)**. Captura o áudio do microfone em tempo real,
-detecta a frequência fundamental com o **McLeod Pitch Method (MPM)** e mostra a
-nota, a oitava, o desvio em cents e a corda ativa.
+Afinador cromático para violão e guitarra de 6 cordas, feito em **React Native +
+Expo (SDK 54)**. Alvo atual: **Android**. Capta o som pelo microfone do celular
+ou por cabo (saída P3/P10 do instrumento via USB-C), detecta a frequência com o
+**McLeod Pitch Method (MPM)** e mostra nota, desvio em cents e a corda.
 
-O app é **100% local** — não há backend, login, nem envio de dados para a nuvem.
+Tudo roda no aparelho: sem backend, sem login, sem envio de dados.
 
 ---
 
-## Quick Start
+## Build
+
+O APK é gerado pelo GitHub Actions (`.github/workflows/android-build.yml`):
+
+- roda a cada push na `main` (exceto mudanças só em `.md`) ou manualmente;
+- passos: `npm install` → checar tipos (`tsc`) → testes → `expo prebuild` →
+  `gradlew assembleRelease`;
+- o APK sai como artefato `pro-tuner-vX.Y.Z` na página do build;
+- versão automática: `1.0.<nº de commits>` (`scripts/version.js`);
+- na `main`, o `CHANGELOG.md` é gerado e commitado sozinho (`scripts/changelog.js`).
+
+Local (com Android SDK instalado):
 
 ```bash
 npm install
-
-# Desenvolvimento (web, para testar rápido no navegador)
-npm run dev
-
-# Dispositivo / emulador (captura de áudio nativa)
-npm run android
-npm run ios
+npm run android   # build de desenvolvimento no aparelho/emulador
 ```
 
-> A detecção de pitch nativa depende de um build de desenvolvimento
-> (`expo run:android` / `expo run:ios`), pois usa o módulo nativo de captura de
-> áudio `@siteed/audio-studio`. No Expo Go o áudio nativo não fica disponível;
-> use `npm run dev` (Web Audio API) para uma prévia no navegador.
-
-Scripts disponíveis:
-
-| Script | Descrição |
+| Script | O que faz |
 |--------|-----------|
-| `npm run dev` | Inicia o Metro em modo web |
-| `npm run android` / `npm run ios` | Build de desenvolvimento com áudio nativo |
-| `npm run check` | Type-check com `tsc --noEmit` |
+| `npm run check` | Checa tipos (`tsc --noEmit`) |
+| `npm test` | Testes automatizados (`tests/*.test.mjs`) |
 | `npm run lint` | ESLint (`expo lint`) |
 | `npm run format` | Prettier |
+| `npm run android` | Build de desenvolvimento Android |
 
 ---
 
-## Como funciona a detecção
+## Detecção (`src/audio/MPMProcessor.ts`)
 
-O núcleo de detecção é o **McLeod Pitch Method (MPM)**, em
-`src/audio/MPMProcessor.ts`. Ele substituiu a antiga combinação FFT + HPS + YIN.
+Janela de 2048 amostras a 44,1 kHz, faixa de **60 a 1200 Hz**.
 
-1. **Normalização por RMS** — silêncio real (`rms < 0.0008`) é descartado; sinais
-   fracos recebem ganho até 20x para chegar num nível alvo.
-2. **NSDF** (Normalized Square Difference Function) — autocorrelação normalizada
-   que varia de -1 a 1; quanto mais perto de 1, mais periódico é o sinal naquele
-   lag.
-3. **Seleção do primeiro pico** acima de 85% do maior pico — evita o erro clássico
-   de "cair" uma oitava abaixo (subharmônica), ponto fraco do YIN simples.
-4. **Interpolação parabólica** ao redor do pico escolhido, para precisão
-   sub-amostra.
-5. **Clareza (0–1)** — retornada junto com a frequência e usada como *confidence*
-   real (o quão periódico é o sinal), não um proxy de volume.
+1. **Normalização por RMS**: abaixo de 0,0008 é silêncio; sinais fracos recebem ganho.
+2. **Estágio grosseiro**: NSDF no sinal decimado 4x (~11 kHz).
+3. **Escolha do pico**: o primeiro pico com pelo menos 90% do maior.
+   - **Pico híbrido**: se o resultado ficar uma oitava abaixo de um pico com 85%
+     (notas a partir de 125 Hz), usa o de cima. Corrige o Mi agudo.
+   - **Conferência em taxa cheia**: picos acima de 85% são conferidos no sinal
+     completo (95% do maior). Corrige o ataque do Si e do Mizinho lido como f/3.
+4. **Refino em taxa cheia** com interpolação parabólica (precisão sub-amostra).
+5. **Sub-harmônico**: se a NSDF em 2T ou 3T supera a de T em 0,05, usa f/2 ou f/3.
+   Corrige o ataque do nylon lido uma oitava acima.
+6. **Clareza (0 a 1)**: o quanto o sinal é periódico; abaixo de 0,3 é descartado.
 
-Faixa de detecção: **60–1200 Hz** (E2 ≈ 82 Hz até acima de E4 ≈ 330 Hz e
-harmônicos).
+### Estabilidade (`src/hooks/usePitchDetectorFinal.ts`)
 
-### Fluxo de dados
+Só no microfone (no cabo o sinal já é limpo):
 
-```
-Microfone
-  → captura PCM 16-bit @ 44.1 kHz
-      • nativo:  @siteed/audio-studio (ExpoAudioStreamModule)
-      • web:     Web Audio API (AnalyserNode)
-  → buffer deslizante (2048 amostras, hop de 1024 = 50% de sobreposição)
-  → gate de ruído por RMS
-  → MPMProcessor.detectPitch()  → { frequency, clarity }
-  → getNoteInfo() (fórmula MIDI, referência A4 configurável)
-  → cents = 1200 · log2(freq / alvo)
-  → usePitchDetectorFinal (setState com throttle de ~50 ms só no render)
-  → PitchLabDisplay (UI)
-```
+- gate de ruído 0,0025 e clareza mínima pela sensibilidade (Alta 0,65 · Média 0,75 · Baixa 0,85);
+- leituras acima de 700 Hz descartadas (ruído do ambiente);
+- nota nova só após 2 leituras seguidas (pulo de oitava: 3);
+- dobra de oitava: harmônico 2x conta como a mesma nota, só se a nota estável
+  for uma corda da afinação (até 150 cents);
+- filtro passa-baixa 1500 Hz opcional, só no modo de teste.
 
-A **detecção roda em toda janela** que couber no buffer; apenas o `setState`
-(re-render) é limitado, para a UI não sobrecarregar.
+O display (`src/components/PitchLabDisplay.tsx`) segura a nota por 400 ms após o
+som sumir.
 
 ---
 
-## Estrutura do projeto
+## Cabo (`src/audio/cableMode.ts`)
 
-```
-app/
-  _layout.tsx            Root layout (tema, safe-area, gesture handler)
-  (tabs)/
-    _layout.tsx          Navegação por abas (Tuner + Settings)
-    index.tsx            TunerScreen — tela principal
-    settings.tsx         SettingsScreen — calibração A4 e afinações
-src/
-  audio/
-    MPMProcessor.ts      McLeod Pitch Method (NSDF)
-  hooks/
-    usePitchDetectorFinal.ts   Captura de áudio (nativo + web) + detecção
-  components/
-    PitchLabDisplay.tsx  Display OLED com cordas, nota e cents
-  utils/
-    noteUtils.ts         Conversão frequência↔nota, afinações
-    SettingsManager.ts   Persistência (AsyncStorage)
-components/              UI compartilhada (ScreenContainer, ícones, tab háptica)
-constants/theme.ts      Tema
-hooks/                  use-colors, use-color-scheme
-lib/                    theme-provider, utils, tema
-```
+- Entrada USB ou fone com fio disponível = modo cabo ("Ativo · Cabo").
+- Com o afinador ativo, a lista de entradas é relida a cada 2,5 s; ao trocar
+  mic ↔ cabo a captura reinicia sozinha.
+- No cabo: gate 0,003 e clareza mínima 0,6, sem as regras de estabilidade.
+
+Limitação: a `@siteed/audio-studio` 3.x não permite escolher a fonte de áudio
+"sem processamento" do Android (só na 4.x, em beta). Medido: o microfone já
+chega praticamente cru.
 
 ---
 
-## Configurações
+## Modo de teste
 
-Persistidas localmente via `AsyncStorage` (`SettingsManager`):
+Liga em **Ajustes → Modo de teste**. Mostra um botão de gravar e dados técnicos
+na tela. Grava até 120 s e salva, numa pasta escolhida pelo usuário:
+
+- `.wav`: o áudio exato que o detector recebeu;
+- `.csv`: uma linha por leitura (amostra, RMS, frequência crua, clareza, status,
+  frequência mostrada).
+
+Essas gravações são usadas para validar mudanças offline antes de gastar build.
+
+---
+
+## Testes (`tests/`)
+
+`npm test` roda com o Node (sem dependências instaladas):
+
+- `mpm.test.mjs`: senos, harmônicos e trechos reais de violão em
+  `tests/fixtures/` (Mi agudo, ataque do nylon, ataque do Si e do Mizinho);
+- `cable.test.mjs`: lógica do modo cabo (plugar/desplugar, releitura sem
+  sobreposição, falhas).
+
+---
+
+## Configurações (`src/utils/SettingsManager.ts`, AsyncStorage)
 
 | Campo | Padrão | Descrição |
 |-------|--------|-----------|
-| `refA4` | `440` | Referência A4 (432 / 438 / 440 / 442 / 444 Hz) |
-| `selectedTuning` | `Standard` | Afinação predefinida |
-| `sensitivity` | `0.8` | Sensibilidade |
-| `noiseThreshold` | `0.005` | Limiar de ruído (gate RMS) |
+| `refA4` | 440 | Referência do Lá (432, 438, 440, 442 ou 444 Hz) |
+| `selectedTuning` | `Standard` | Afinação |
+| `sensitivity` | 0,7 (Média) | Baixa 0,4 · Média 0,7 · Alta 0,9 (só microfone) |
+| `ringStyle` | — | Estilo do mostrador |
+| `testMode` | desligado | Modo de teste |
+| `testLowpass` | desligado | Filtro 1500 Hz (só no modo de teste) |
+| `noiseThreshold` | 0,005 | Salvo, mas **não usado**: o gate é fixo no código |
 
-Afinações disponíveis (cordas abertas, em `noteUtils.ts`):
+Afinações (`src/utils/noteUtils.ts`):
 
 | Afinação | Cordas |
 |----------|--------|
-| Standard | E2 A2 D3 G3 B3 E4 |
+| Padrão | E2 A2 D3 G3 B3 E4 |
 | Drop D | D2 A2 D3 G3 B3 E4 |
-| Half Step Down | D#2 G#2 C#3 F#3 A#3 D#4 |
-| Full Step Down | D2 G2 C3 F3 A3 D4 |
-| Open G | E2 G2 D3 G3 B3 G4 |
+| Meio tom abaixo | D#2 G#2 C#3 F#3 A#3 D#4 |
+| Um tom abaixo | D2 G2 C3 F3 A3 D4 |
+| Open G | D2 G2 D3 G3 B3 D4 |
 
 ---
 
-## Stack
+## Estrutura
 
-- **Expo** ~54 / **React Native** 0.81 / **React** 19
-- **expo-router** — navegação por arquivos
-- **@siteed/audio-studio** — captura de áudio PCM nativa
-- **react-native-svg** — display do afinador
-- **react-native-reanimated** — animações
-- **nativewind** (Tailwind CSS) — estilização
-- **@react-native-async-storage/async-storage** — persistência local
+```
+app/
+  _layout.tsx               Layout raiz (tema, safe-area, gestos)
+  audio-inputs.tsx          Ajustes → Entradas de áudio (diagnóstico)
+  (tabs)/
+    _layout.tsx             Abas (Afinador + Ajustes)
+    index.tsx               Tela do afinador (mic/cabo, modo de teste)
+    settings.tsx            Ajustes
+src/
+  audio/
+    MPMProcessor.ts         Detecção (MPM)
+    cableMode.ts            Lógica do modo cabo
+    TestRecorder.ts         Gravação do modo de teste (.wav + .csv)
+  hooks/
+    usePitchDetectorFinal.ts  Captura + detecção + estabilidade
+  components/
+    PitchLabDisplay.tsx     Tela do afinador (nota, cents, cordas)
+    TunerDial.tsx           Mostrador (estilos de anel)
+  utils/
+    noteUtils.ts            Frequência ↔ nota, afinações
+    SettingsManager.ts      Configurações
+components/, hooks/, lib/, constants/   Tema e UI base (vindos do template, em uso)
+scripts/                    Versão, changelog e patch do gesture-handler
+tests/                      Testes automatizados e trechos reais de áudio
+```
+
+---
+
+## Limitações conhecidas
+
+- Baixo não é suportado: a faixa começa em 60 Hz (o Mi do baixo é 41 Hz).
+- iOS e web têm código de captura, mas não são alvo nem testados.
+- O APK usa a assinatura de debug (assinatura própria ainda pendente).
 
 ---
 
 ## Privacidade
 
-Todo o processamento acontece no dispositivo. A única permissão necessária é o
-**microfone** (`RECORD_AUDIO`). Nenhum áudio é gravado em arquivo nem enviado
-para servidores.
+Única permissão: **microfone** (`RECORD_AUDIO`). Nada é enviado para fora do
+aparelho. Áudio só é salvo quando o usuário liga o modo de teste, grava e
+escolhe a pasta.
