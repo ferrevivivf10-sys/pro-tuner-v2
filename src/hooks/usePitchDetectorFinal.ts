@@ -4,6 +4,12 @@ import { decode } from "base-64";
 import { useAudioRecorder } from "@siteed/audio-studio";
 import { MPMProcessor } from "../audio/MPMProcessor";
 import { TestRecorder } from "../audio/TestRecorder";
+import {
+  createStabilizer,
+  isMicReadingRejected,
+  HOLD_MS,
+  HOLD_SOUND_MS,
+} from "../audio/stability";
 import { NOTES } from "../utils/noteUtils";
 
 export interface PitchData {
@@ -32,28 +38,6 @@ const HOP_SIZE = 1024; // 50% de sobreposicao: detecta 2x mais vezes que o buffe
 const MAX_BUFFER = BUFFER_SIZE * 2;
 const UI_UPDATE_MIN_INTERVAL_MS = 50; // limita re-render, nunca a deteccao em si
 
-// Estabilidade (modo microfone): descarta leituras isoladas de ruido,
-// ataque da corda e pulos de oitava. Valores medidos nos testes com ruido.
-const SAME_NOTE_CENTS = 50;     // leituras dentro disso contam como a mesma nota
-const CONFIRM_FRAMES = 2;       // leituras seguidas para trocar de nota
-const OCTAVE_CONFIRM_FRAMES = 3; // pulo de oitava exige mais confirmacao
-const HOLD_MS = 200;            // segura a nota exibida apos o som sumir
-const HOLD_SOUND_MS = 600;      // segura mais se ainda ha som (leitura suja por ruido)
-const FOLD_STRING_CENTS = 150;  // a dobra de oitava so vale se a nota estavel for uma corda da afinacao
-const MIC_MAX_FREQ = 700;       // acima disso e ruido do ambiente (Mi agudo na 12a casa = 659 Hz)
-
-// Clareza minima no mic conforme a sensibilidade escolhida.
-// Ruido/voz medidos ficam abaixo de ~0.75.
-function micMinClarity(sensitivity: number): number {
-  if (sensitivity >= 0.85) return 0.65; // Alta: pega notas fracas (ambiente silencioso)
-  if (sensitivity >= 0.55) return 0.75; // Media: equilibrio
-  return 0.85;                          // Baixa: so notas bem limpas (muito ruido)
-}
-
-function centsBetween(a: number, b: number): number {
-  return 1200 * Math.log2(a / b);
-}
-
 // Filtro passa-baixa de 2a ordem (biquad Butterworth), opcional no modo de teste.
 const LOWPASS_HZ = 1500;
 const LP = (() => {
@@ -61,7 +45,12 @@ const LP = (() => {
   const c = Math.cos(w0);
   const alpha = Math.sin(w0) / (2 * Math.SQRT1_2);
   const a0 = 1 + alpha;
-  return { b0: (1 - c) / 2 / a0, b1: (1 - c) / a0, a1: (-2 * c) / a0, a2: (1 - alpha) / a0 };
+  return {
+    b0: (1 - c) / 2 / a0,
+    b1: (1 - c) / a0,
+    a1: (-2 * c) / a0,
+    a2: (1 - alpha) / a0,
+  };
 })();
 
 // Junta o bloco novo ao buffer, mantendo so as ultimas MAX_BUFFER amostras
@@ -73,11 +62,10 @@ function appendTail(prev: Float32Array, samples: Float32Array): Float32Array {
   return len > MAX_BUFFER ? combined.slice(len - MAX_BUFFER) : combined;
 }
 
-function isOctaveJump(a: number, b: number): boolean {
-  return Math.abs(Math.abs(centsBetween(a, b)) - 1200) < SAME_NOTE_CENTS;
-}
-
-function calculateCentsToTarget(detectedFreq: number, targetFreq: number): number {
+function calculateCentsToTarget(
+  detectedFreq: number,
+  targetFreq: number,
+): number {
   if (detectedFreq <= 0 || targetFreq <= 0) return 0;
   return 1200 * Math.log2(detectedFreq / targetFreq);
 }
@@ -121,7 +109,7 @@ export function usePitchDetectorFinal(
   sensitivity: number = 0.8,
   stabilize: boolean = false,
   stringFreqs: number[] = [], // cordas da afinacao (Hz, ja com o A4 escolhido)
-  lowpass: boolean = false    // modo de teste: filtra o audio antes do detector
+  lowpass: boolean = false, // modo de teste: filtra o audio antes do detector
 ): PitchData {
   const [pitchData, setPitchData] = useState<PitchData>(INITIAL_PITCH_DATA);
 
@@ -129,24 +117,24 @@ export function usePitchDetectorFinal(
   const bufferRef = useRef<Float32Array>(new Float32Array(0));
   const lastUpdateRef = useRef(0);
   const lastChunkLenRef = useRef(0); // DIAGNOSTICO: amostras por callback
-  const stableFreqRef = useRef(0);   // ultima nota aceita (Hz)
-  const candFreqRef = useRef(0);     // candidata a nova nota (Hz)
-  const candCountRef = useRef(0);    // leituras seguidas da candidata
-  const lastAcceptRef = useRef(0);   // quando a ultima leitura foi aceita
+  const stabilizerRef = useRef(createStabilizer()); // modo microfone
   const stringFreqsRef = useRef(stringFreqs);
   const lowpassRef = useRef(lowpass);
   const filteredRef = useRef<Float32Array>(new Float32Array(0)); // mesmo buffer, filtrado
   const lpStateRef = useRef({ x1: 0, x2: 0, y1: 0, y2: 0 });
 
-  const { startRecording, stopRecording } = useAudioRecorder();
+  const recorder = useAudioRecorder();
+  const recorderRef = useRef(recorder);
 
   useEffect(() => {
     isActiveRef.current = isActive;
   }, [isActive]);
 
-  // Lidos por ref para nao reiniciar a gravacao quando mudam
+  // Lidos por ref para nao reiniciar a gravacao quando mudam (as funcoes do
+  // gravador podem ser recriadas a cada render)
   stringFreqsRef.current = stringFreqs;
   lowpassRef.current = lowpass;
+  recorderRef.current = recorder;
 
   useEffect(() => {
     if (Platform.OS === "web") return;
@@ -161,7 +149,8 @@ export function usePitchDetectorFinal(
         const MIC = PermissionsAndroid.PERMISSIONS.RECORD_AUDIO;
         const granted =
           (await PermissionsAndroid.check(MIC)) ||
-          (await PermissionsAndroid.request(MIC)) === PermissionsAndroid.RESULTS.GRANTED;
+          (await PermissionsAndroid.request(MIC)) ===
+            PermissionsAndroid.RESULTS.GRANTED;
 
         if (!granted || cancelled) {
           setPitchData({
@@ -176,7 +165,7 @@ export function usePitchDetectorFinal(
           return;
         }
 
-        await startRecording({
+        await recorderRef.current.startRecording({
           sampleRate: SAMPLE_RATE,
           channels: 1,
           encoding: "pcm_16bit",
@@ -196,7 +185,12 @@ export function usePitchDetectorFinal(
             const lp = lpStateRef.current;
             for (let i = 0; i < samples.length; i++) {
               const x = samples[i];
-              const y = LP.b0 * x + LP.b1 * lp.x1 + LP.b0 * lp.x2 - LP.a1 * lp.y1 - LP.a2 * lp.y2;
+              const y =
+                LP.b0 * x +
+                LP.b1 * lp.x1 +
+                LP.b0 * lp.x2 -
+                LP.a1 * lp.y1 -
+                LP.a2 * lp.y2;
               lp.x2 = lp.x1;
               lp.x1 = x;
               lp.y2 = lp.y1;
@@ -224,7 +218,9 @@ export function usePitchDetectorFinal(
                   : chunk;
               // Mantem um rabo do buffer para a proxima janela ter sobreposicao
               bufferRef.current = buf.slice(buf.length - HOP_SIZE);
-              filteredRef.current = fbuf.slice(Math.max(0, fbuf.length - HOP_SIZE));
+              filteredRef.current = fbuf.slice(
+                Math.max(0, fbuf.length - HOP_SIZE),
+              );
 
               let sumSq = 0;
               for (let i = 0; i < chunk.length; i++) {
@@ -233,27 +229,36 @@ export function usePitchDetectorFinal(
               const rms = Math.sqrt(sumSq / chunk.length);
 
               const now = Date.now();
-              const canRender = now - lastUpdateRef.current >= UI_UPDATE_MIN_INTERVAL_MS;
+              const canRender =
+                now - lastUpdateRef.current >= UI_UPDATE_MIN_INTERVAL_MS;
 
               const diag = (prefix: string, clar?: number) =>
-                prefix + "RMS " + rms.toFixed(4) +
+                prefix +
+                "RMS " +
+                rms.toFixed(4) +
                 (clar !== undefined ? " · clar " + clar.toFixed(2) : "") +
-                " · n=" + lastChunkLenRef.current;
+                " · n=" +
+                lastChunkLenRef.current;
 
               // Limpa a nota exibida (silencio por HOLD_MS ou ruido por HOLD_SOUND_MS)
               const clearNote = (text: string) => {
-                stableFreqRef.current = 0;
-                candCountRef.current = 0;
                 if (canRender) {
                   lastUpdateRef.current = now;
-                  setPitchData((p) => ({ ...p, note: "-", frequency: 0, confidence: 0, detectionMethod: text }));
+                  setPitchData((p) => ({
+                    ...p,
+                    note: "-",
+                    frequency: 0,
+                    confidence: 0,
+                    detectionMethod: text,
+                  }));
                 }
               };
 
               if (rms < noiseThreshold) {
                 TestRecorder.logFrame(rms, 0, 0, "silencio", 0);
                 if (stabilize) {
-                  if (now - lastAcceptRef.current >= HOLD_MS) clearNote(diag(""));
+                  if (stabilizerRef.current.release(now, HOLD_MS))
+                    clearNote(diag(""));
                   return;
                 }
                 if (canRender) {
@@ -263,19 +268,29 @@ export function usePitchDetectorFinal(
                     note: "-",
                     frequency: 0,
                     confidence: 0,
-                    detectionMethod: "RMS " + rms.toFixed(5) + " · n=" + lastChunkLenRef.current,
+                    detectionMethod:
+                      "RMS " +
+                      rms.toFixed(5) +
+                      " · n=" +
+                      lastChunkLenRef.current,
                   }));
                 }
                 return;
               }
 
-              let { frequency: freq, clarity } = MPMProcessor.detectPitch(detChunk, SAMPLE_RATE);
+              let { frequency: freq, clarity } = MPMProcessor.detectPitch(
+                detChunk,
+                SAMPLE_RATE,
+              );
               const rawFreq = freq;
               const lowClarity =
-                stabilize && (clarity < micMinClarity(sensitivity) || freq > MIC_MAX_FREQ);
+                stabilize && isMicReadingRejected(freq, clarity, sensitivity);
               if (freq <= 0 || lowClarity) {
                 TestRecorder.logFrame(rms, rawFreq, clarity, "sem_nota", 0);
-                if (stabilize && now - lastAcceptRef.current >= HOLD_SOUND_MS) {
+                if (
+                  stabilize &&
+                  stabilizerRef.current.release(now, HOLD_SOUND_MS)
+                ) {
                   clearNote(diag("SEM NOTA · ", clarity));
                   return;
                 }
@@ -285,59 +300,38 @@ export function usePitchDetectorFinal(
                   setPitchData((p) => ({
                     ...p,
                     detectionMethod:
-                      "SEM NOTA · RMS " + rms.toFixed(4) +
-                      " · clar " + clarity.toFixed(2) +
-                      " · n=" + lastChunkLenRef.current,
+                      "SEM NOTA · RMS " +
+                      rms.toFixed(4) +
+                      " · clar " +
+                      clarity.toFixed(2) +
+                      " · n=" +
+                      lastChunkLenRef.current,
                   }));
                 }
                 return;
               }
 
               if (stabilize) {
-                const stable = stableFreqRef.current;
-                // Dobra de oitava: no fim da corda o harmonico (2x) domina;
-                // com nota ja confirmada, trata como a mesma nota. So vale se a
-                // nota estavel for uma corda da afinacao (senao um erro de
-                // oitava no ataque ficaria preso).
-                const strings = stringFreqsRef.current;
-                const stableIsString =
-                  strings.length === 0 ||
-                  strings.some((s) => s > 0 && Math.abs(centsBetween(stable, s)) < FOLD_STRING_CENTS);
-                if (
-                  stable > 0 &&
-                  stableIsString &&
-                  Math.abs(centsBetween(freq, stable) - 1200) < SAME_NOTE_CENTS
-                ) {
-                  freq = freq / 2;
-                }
-                if (stable > 0 && Math.abs(centsBetween(freq, stable)) < SAME_NOTE_CENTS) {
-                  // mesma nota: aceita direto
-                  stableFreqRef.current = freq;
-                  candCountRef.current = 0;
-                } else {
-                  // nota nova: precisa se repetir antes de aparecer
-                  const sameCand =
-                    candCountRef.current > 0 &&
-                    Math.abs(centsBetween(freq, candFreqRef.current)) < SAME_NOTE_CENTS;
-                  candFreqRef.current = freq;
-                  candCountRef.current = sameCand ? candCountRef.current + 1 : 1;
-                  const need =
-                    stable > 0 && isOctaveJump(freq, stable) ? OCTAVE_CONFIRM_FRAMES : CONFIRM_FRAMES;
-                  if (candCountRef.current < need) {
-                    TestRecorder.logFrame(rms, rawFreq, clarity, "segurando", 0);
-                    if (canRender) {
-                      lastUpdateRef.current = now;
-                      setPitchData((p) => ({
-                        ...p,
-                        detectionMethod: diag("SEGURANDO " + candCountRef.current + "/" + need + " · ", clarity),
-                      }));
-                    }
-                    return;
+                const step = stabilizerRef.current.push(
+                  freq,
+                  now,
+                  stringFreqsRef.current,
+                );
+                if (step.kind === "hold") {
+                  TestRecorder.logFrame(rms, rawFreq, clarity, "segurando", 0);
+                  if (canRender) {
+                    lastUpdateRef.current = now;
+                    setPitchData((p) => ({
+                      ...p,
+                      detectionMethod: diag(
+                        "SEGURANDO " + step.count + "/" + step.need + " · ",
+                        clarity,
+                      ),
+                    }));
                   }
-                  stableFreqRef.current = freq;
-                  candCountRef.current = 0;
+                  return;
                 }
-                lastAcceptRef.current = now;
+                freq = step.frequency;
               }
 
               TestRecorder.logFrame(rms, rawFreq, clarity, "aceita", freq);
@@ -356,9 +350,12 @@ export function usePitchDetectorFinal(
                   inTune: Math.abs(cents) < 10,
                   confidence: clarity,
                   detectionMethod:
-                    "RMS " + rms.toFixed(4) +
-                    " · clar " + clarity.toFixed(2) +
-                    " · n=" + lastChunkLenRef.current,
+                    "RMS " +
+                    rms.toFixed(4) +
+                    " · clar " +
+                    clarity.toFixed(2) +
+                    " · n=" +
+                    lastChunkLenRef.current,
                 });
               }
             }
@@ -383,7 +380,7 @@ export function usePitchDetectorFinal(
 
     return () => {
       cancelled = true;
-      stopRecording().catch(() => {});
+      recorderRef.current.stopRecording().catch(() => {});
       bufferRef.current = new Float32Array(0);
       filteredRef.current = new Float32Array(0);
       lpStateRef.current = { x1: 0, x2: 0, y1: 0, y2: 0 };
@@ -419,7 +416,10 @@ export function usePitchDetectorFinal(
           const rms = Math.sqrt(sumSq / buffer.length);
 
           if (rms >= noiseThreshold) {
-            const { frequency: freq, clarity } = MPMProcessor.detectPitch(buffer, SAMPLE_RATE);
+            const { frequency: freq, clarity } = MPMProcessor.detectPitch(
+              buffer,
+              SAMPLE_RATE,
+            );
             if (freq > 0) {
               const info = getNoteInfo(freq, refA4);
               if (info) {

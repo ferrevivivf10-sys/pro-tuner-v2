@@ -29,13 +29,14 @@ Estado em 14/11/2026 · versão 1.0.53 na `main`.
 - [x] Testes automatizados (`npm test`): detector com trechos reais + lógica do cabo
 - [x] Build checa tipos (`tsc`) antes dos testes
 - [x] Sobras do template e docs antigos removidos
+- [x] Estabilidade do mic separada do hook (`src/audio/stability.ts`) e testada
+- [x] `noiseThreshold` sem uso removido das configurações
+- [x] Lint sem avisos e código formatado com Prettier
 
 ## Pendente
 
 - [ ] Assinatura própria do APK (chave + segredo no GitHub)
 - [ ] Acessibilidade no Afinador e em Ajustes
-- [ ] Separar a lógica de estabilidade do hook e testar
-- [ ] `noiseThreshold` é salvo mas não usado (gate fixo no código): remover ou usar
 - [ ] Atualizar actions do workflow (avisos de Node 20)
 - [ ] Fonte de áudio sem processamento: só na `@siteed/audio-studio` 4.x (beta)
 

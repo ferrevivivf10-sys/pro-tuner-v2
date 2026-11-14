@@ -32,14 +32,18 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "Afinador",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="waveform" color={color} />,
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="waveform" color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: "Ajustes",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="gearshape.fill" color={color} />
+          ),
         }}
       />
     </Tabs>

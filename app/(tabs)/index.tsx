@@ -1,7 +1,13 @@
 /**
  * TunerScreen — Tela principal do Pro Tuner (tema OLED puro)
  */
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import {
   View,
   Text,
@@ -19,14 +25,23 @@ import { ScreenContainer } from "@/components/screen-container";
 import { PitchLabDisplay } from "@/src/components/PitchLabDisplay";
 import { DEFAULT_RING_STYLE } from "@/src/components/TunerDial";
 import { usePitchDetectorFinal } from "@/src/hooks/usePitchDetectorFinal";
-import { SettingsManager, type TunerSettings } from "@/src/utils/SettingsManager";
+import {
+  SettingsManager,
+  type TunerSettings,
+} from "@/src/utils/SettingsManager";
 import { TUNINGS, TUNING_LABELS, type TuningName } from "@/src/utils/noteUtils";
 import Constants from "expo-constants";
 import { TestRecorder, TEST_MAX_SECONDS } from "@/src/audio/TestRecorder";
 import { hasCable, createDevicePoller } from "@/src/audio/cableMode";
 
 const KEEP_AWAKE_TAG = "pro-tuner";
-const TUNING_OPTIONS = ["Standard", "DropD", "HalfStepDown", "FullStepDown", "OpenG"] as const;
+const TUNING_OPTIONS = [
+  "Standard",
+  "DropD",
+  "HalfStepDown",
+  "FullStepDown",
+  "OpenG",
+] as const;
 
 // Modo cabo: entrada USB/fone plugada. Sem ruido ambiente, entao usa
 // limites fixos medidos no violao (chiado ~0.0013 RMS / clareza <= 0.36;
@@ -44,7 +59,9 @@ export default function TunerScreen() {
   const [testSeconds, setTestSeconds] = useState<number | null>(null);
   const [testSaving, setTestSaving] = useState(false);
   const testTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [appInForeground, setAppInForeground] = useState(AppState.currentState === "active");
+  const [appInForeground, setAppInForeground] = useState(
+    AppState.currentState === "active",
+  );
   const [tabFocused, setTabFocused] = useState(true);
 
   const { devices, refreshDevices } = useAudioDevices();
@@ -65,7 +82,7 @@ export default function TunerScreen() {
       setTabFocused(true);
       refreshDevices().catch(() => {});
       return () => setTabFocused(false);
-    }, [refreshDevices])
+    }, [refreshDevices]),
   );
 
   // Com o afinador ativo, rele as entradas a cada 2,5 s: o aviso de cabo
@@ -75,7 +92,10 @@ export default function TunerScreen() {
   refreshRef.current = refreshDevices;
   useEffect(() => {
     if (!isActive || !appInForeground || !tabFocused) return;
-    const poller = createDevicePoller(() => refreshRef.current(), DEVICE_REFRESH_MS);
+    const poller = createDevicePoller(
+      () => refreshRef.current(),
+      DEVICE_REFRESH_MS,
+    );
     poller.start();
     return () => poller.stop();
   }, [isActive, appInForeground, tabFocused]);
@@ -104,13 +124,15 @@ export default function TunerScreen() {
   useFocusEffect(
     useCallback(() => {
       loadSettings().catch((error) =>
-        console.error("Erro ao recarregar configuracoes:", error)
+        console.error("Erro ao recarregar configuracoes:", error),
       );
-    }, [loadSettings])
+    }, [loadSettings]),
   );
 
   const isCable = hasCable(devices);
-  const sensitivity = isCable ? CABLE_SENSITIVITY : settings?.sensitivity ?? 0.7;
+  const sensitivity = isCable
+    ? CABLE_SENSITIVITY
+    : (settings?.sensitivity ?? 0.7);
 
   const testMode = settings?.testMode ?? false;
   const testLowpass = testMode && !isCable && (settings?.testLowpass ?? false);
@@ -119,8 +141,11 @@ export default function TunerScreen() {
   const refA4 = settings?.refA4 ?? 440;
   const selectedTuning = settings?.selectedTuning ?? "Standard";
   const stringFreqs = useMemo(
-    () => (TUNINGS[selectedTuning as TuningName] ?? TUNINGS.Standard).map((f) => (f * refA4) / 440),
-    [selectedTuning, refA4]
+    () =>
+      (TUNINGS[selectedTuning as TuningName] ?? TUNINGS.Standard).map(
+        (f) => (f * refA4) / 440,
+      ),
+    [selectedTuning, refA4],
   );
 
   const pitchData = usePitchDetectorFinal(
@@ -130,7 +155,7 @@ export default function TunerScreen() {
     sensitivity,
     !isCable, // estabilidade so no microfone
     stringFreqs,
-    testLowpass
+    testLowpass,
   );
 
   // Tela sempre ligada enquanto o afinador esta ativo e nesta aba
@@ -141,7 +166,7 @@ export default function TunerScreen() {
       return () => {
         deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {});
       };
-    }, [isActive])
+    }, [isActive]),
   );
 
   const toggleTuner = useCallback(() => setIsActive((prev) => !prev), []);
@@ -155,9 +180,12 @@ export default function TunerScreen() {
     setTestSaving(true);
     try {
       const ok = await TestRecorder.save();
-      Alert.alert(ok ? "Teste salvo" : "Teste não salvo", ok
-        ? "Os arquivos .wav e .csv estão na pasta escolhida."
-        : "Nenhuma pasta foi escolhida.");
+      Alert.alert(
+        ok ? "Teste salvo" : "Teste não salvo",
+        ok
+          ? "Os arquivos .wav e .csv estão na pasta escolhida."
+          : "Nenhuma pasta foi escolhida.",
+      );
     } catch (e) {
       Alert.alert("Erro ao salvar", e instanceof Error ? e.message : String(e));
     } finally {
@@ -172,12 +200,18 @@ export default function TunerScreen() {
     }
     if (!isActive) setIsActive(true);
     TestRecorder.start(
-      "versao=" + (Constants.expoConfig?.version ?? "?") +
-      " modo=" + (isCable ? "cabo" : "mic") +
-      " sensibilidade=" + sensitivity +
-      " filtro=" + (testLowpass ? "1500" : "nao") +
-      " a4=" + (settings?.refA4 ?? 440) +
-      " data=" + new Date().toISOString()
+      "versao=" +
+        (Constants.expoConfig?.version ?? "?") +
+        " modo=" +
+        (isCable ? "cabo" : "mic") +
+        " sensibilidade=" +
+        sensitivity +
+        " filtro=" +
+        (testLowpass ? "1500" : "nao") +
+        " a4=" +
+        (settings?.refA4 ?? 440) +
+        " data=" +
+        new Date().toISOString(),
     );
     setTestSeconds(0);
     testTimerRef.current = setInterval(() => {
@@ -192,9 +226,11 @@ export default function TunerScreen() {
   const selectTuning = useCallback(async (tuning: string) => {
     try {
       await SettingsManager.setTuning(tuning as any);
-      setSettings((prev) => (prev ? { ...prev, selectedTuning: tuning } : prev));
+      setSettings((prev) =>
+        prev ? { ...prev, selectedTuning: tuning } : prev,
+      );
       setTuningModalVisible(false);
-    } catch (e) {
+    } catch {
       Alert.alert("Erro", "Nao foi possivel salvar a afinacao");
     }
   }, []);
@@ -215,7 +251,12 @@ export default function TunerScreen() {
       <View style={styles.screen}>
         <View style={styles.header}>
           <View style={styles.statusRow}>
-            <View style={[styles.dot, { backgroundColor: isActive ? "#00E676" : "#555" }]} />
+            <View
+              style={[
+                styles.dot,
+                { backgroundColor: isActive ? "#00E676" : "#555" },
+              ]}
+            />
             <Text style={styles.statusText}>
               {isActive ? "Ativo" : "Pausado"}
               {isCable ? " · Cabo" : ""}
@@ -245,11 +286,20 @@ export default function TunerScreen() {
               onPress={toggleTest}
               disabled={testSaving}
             >
-              <Text style={[styles.testBtnText, testSeconds !== null && styles.testBtnTextOn]}>
+              <Text
+                style={[
+                  styles.testBtnText,
+                  testSeconds !== null && styles.testBtnTextOn,
+                ]}
+              >
                 {testSaving
                   ? "SALVANDO..."
                   : testSeconds !== null
-                    ? "■ PARAR E SALVAR  " + Math.floor(testSeconds) + "s / " + TEST_MAX_SECONDS + "s"
+                    ? "■ PARAR E SALVAR  " +
+                      Math.floor(testSeconds) +
+                      "s / " +
+                      TEST_MAX_SECONDS +
+                      "s"
                     : "● GRAVAR TESTE"}
               </Text>
             </TouchableOpacity>
@@ -288,14 +338,16 @@ export default function TunerScreen() {
                 key={t}
                 style={[
                   styles.modalItem,
-                  (settings?.selectedTuning ?? "Standard") === t && styles.modalItemActive,
+                  (settings?.selectedTuning ?? "Standard") === t &&
+                    styles.modalItemActive,
                 ]}
                 onPress={() => selectTuning(t)}
               >
                 <Text
                   style={[
                     styles.modalItemText,
-                    (settings?.selectedTuning ?? "Standard") === t && styles.modalItemTextActive,
+                    (settings?.selectedTuning ?? "Standard") === t &&
+                      styles.modalItemTextActive,
                   ]}
                 >
                   {TUNING_LABELS[t as TuningName]}
@@ -310,28 +362,114 @@ export default function TunerScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, alignItems: "center", paddingTop: 16, paddingBottom: 32, paddingHorizontal: 16, backgroundColor: "#000000" },
-  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", gap: 16, backgroundColor: "#000000" },
+  screen: {
+    flex: 1,
+    alignItems: "center",
+    paddingTop: 16,
+    paddingBottom: 32,
+    paddingHorizontal: 16,
+    backgroundColor: "#000000",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 16,
+    backgroundColor: "#000000",
+  },
   loadingText: { color: "#CCCCCC", fontSize: 14 },
-  header: { width: "100%", flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+  header: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
   statusRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   dot: { width: 7, height: 7, borderRadius: 4 },
-  statusText: { color: "#888", fontSize: 12, fontWeight: "600", letterSpacing: 0.5 },
+  statusText: {
+    color: "#888",
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+  },
   calibText: { color: "#555", fontSize: 11, letterSpacing: 0.5 },
   displayArea: { flex: 1, justifyContent: "center", alignItems: "center" },
-  testBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 14, borderWidth: 1, borderColor: "#333", marginBottom: 12 },
+  testBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#333",
+    marginBottom: 12,
+  },
   testBtnOn: { borderColor: "#FF5252" },
-  testBtnText: { color: "#777", fontSize: 11, fontWeight: "700", letterSpacing: 1 },
+  testBtnText: {
+    color: "#777",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1,
+  },
   testBtnTextOn: { color: "#FF5252" },
-  methodText: { color: "#444", fontSize: 10, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 16, marginTop: 8 },
-  divider: { width: "60%", height: 1, backgroundColor: "#1A1A1A", marginBottom: 20 },
-  toggleBtn: { backgroundColor: "#0A0A0A", paddingHorizontal: 48, paddingVertical: 14, borderRadius: 32, borderWidth: 1.5, borderColor: "#333" },
+  methodText: {
+    color: "#444",
+    fontSize: 10,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    marginBottom: 16,
+    marginTop: 8,
+  },
+  divider: {
+    width: "60%",
+    height: 1,
+    backgroundColor: "#1A1A1A",
+    marginBottom: 20,
+  },
+  toggleBtn: {
+    backgroundColor: "#0A0A0A",
+    paddingHorizontal: 48,
+    paddingVertical: 14,
+    borderRadius: 32,
+    borderWidth: 1.5,
+    borderColor: "#333",
+  },
   toggleBtnActive: { borderColor: "#00E676", backgroundColor: "#0A1A0A" },
-  toggleBtnText: { color: "#FFF", fontSize: 13, fontWeight: "bold", letterSpacing: 1.5 },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
-  modalSheet: { backgroundColor: "#0A0A0A", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, gap: 8, borderTopWidth: 1, borderColor: "#1F1F1F" },
-  modalTitle: { color: "#AAAAAA", fontSize: 12, fontWeight: "700", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 },
-  modalItem: { paddingVertical: 14, paddingHorizontal: 16, borderRadius: 10, backgroundColor: "#121212", borderWidth: 1, borderColor: "#1F1F1F" },
+  toggleBtnText: {
+    color: "#FFF",
+    fontSize: 13,
+    fontWeight: "bold",
+    letterSpacing: 1.5,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "flex-end",
+  },
+  modalSheet: {
+    backgroundColor: "#0A0A0A",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    gap: 8,
+    borderTopWidth: 1,
+    borderColor: "#1F1F1F",
+  },
+  modalTitle: {
+    color: "#AAAAAA",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    marginBottom: 8,
+  },
+  modalItem: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: "#121212",
+    borderWidth: 1,
+    borderColor: "#1F1F1F",
+  },
   modalItemActive: { borderColor: "#00E676", backgroundColor: "#0A1A0A" },
   modalItemText: { color: "#CCCCCC", fontSize: 15, fontWeight: "600" },
   modalItemTextActive: { color: "#00E676" },

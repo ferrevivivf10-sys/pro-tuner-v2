@@ -21,7 +21,9 @@ const TYPE_LABELS: Record<string, string> = {
 export default function AudioInputsScreen() {
   const { devices, loading, error, refreshDevices } = useAudioDevices();
 
-  const cable = devices.find((d) => CABLE_TYPES.includes(d.type) && d.isAvailable);
+  const cable = devices.find(
+    (d) => CABLE_TYPES.includes(d.type) && d.isAvailable,
+  );
   // Entradas internas repetidas (tipo "unknown") nao ajudam o usuario
   const visible = devices.filter((d) => d.type in TYPE_LABELS && d.isAvailable);
   const builtin = visible.find((d) => d.type === "builtin_mic");
@@ -34,13 +36,20 @@ export default function AudioInputsScreen() {
   return (
     <ScreenContainer containerClassName="bg-black">
       <ScrollView contentContainerStyle={styles.content}>
-        <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" accessibilityLabel="Voltar">
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Voltar"
+        >
           <Text style={styles.back}>‹ Ajustes</Text>
         </Pressable>
 
         <Text style={styles.title}>Entradas de áudio</Text>
 
-        <View style={[styles.status, cable ? styles.statusCable : styles.statusMic]}>
+        <View
+          style={[styles.status, cable ? styles.statusCable : styles.statusMic]}
+        >
           <Text style={[styles.statusTitle, cable && styles.statusTitleCable]}>
             {cable ? "Cabo detectado" : "Usando o microfone do celular"}
           </Text>
@@ -52,7 +61,9 @@ export default function AudioInputsScreen() {
         </View>
 
         {loading && <Text style={styles.info}>Carregando...</Text>}
-        {error && <Text style={styles.error}>Não foi possível ler as entradas.</Text>}
+        {error && (
+          <Text style={styles.error}>Não foi possível ler as entradas.</Text>
+        )}
 
         {list.map((d) => {
           const inUse = d.id === inUseId;
@@ -62,7 +73,9 @@ export default function AudioInputsScreen() {
                 <Text style={styles.name}>{TYPE_LABELS[d.type]}</Text>
                 {inUse && <Text style={styles.badge}>EM USO</Text>}
               </View>
-              <Text style={styles.detail} numberOfLines={1}>{d.name}</Text>
+              <Text style={styles.detail} numberOfLines={1}>
+                {d.name}
+              </Text>
             </View>
           );
         })}
@@ -101,7 +114,11 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   cardInUse: { borderColor: "#00C853" },
-  cardRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  cardRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   name: { color: "#FFFFFF", fontSize: 15, fontWeight: "600" },
   detail: { color: "#777777", fontSize: 12 },
   badge: { color: "#00C853", fontSize: 11, fontWeight: "700" },

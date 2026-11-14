@@ -12,9 +12,8 @@ export interface TunerSettings {
   refA4: number;
   selectedTuning: string;
   sensitivity: number;
-  noiseThreshold: number;
   ringStyle: RingStyleName;
-  testMode: boolean;    // mostra o botao de gravar teste e o texto de diagnostico
+  testMode: boolean; // mostra o botao de gravar teste e o texto de diagnostico
   testLowpass: boolean; // modo de teste: filtro passa-baixa de 1500 Hz no microfone
 }
 
@@ -24,7 +23,6 @@ const DEFAULT_SETTINGS: TunerSettings = {
   refA4: 440,
   selectedTuning: "Standard",
   sensitivity: 0.7,
-  noiseThreshold: 0.005,
   ringStyle: DEFAULT_RING_STYLE,
   testMode: false,
   testLowpass: false,
@@ -54,10 +52,6 @@ export class SettingsManager {
           typeof parsed.sensitivity === "number"
             ? parsed.sensitivity
             : DEFAULT_SETTINGS.sensitivity,
-        noiseThreshold:
-          typeof parsed.noiseThreshold === "number"
-            ? parsed.noiseThreshold
-            : DEFAULT_SETTINGS.noiseThreshold,
         // valida o nome: um estilo removido numa versao futura nao pode
         // quebrar o mostrador de quem ja tinha escolhido ele
         ringStyle:
@@ -83,7 +77,7 @@ export class SettingsManager {
 
   private static async updateField<K extends keyof TunerSettings>(
     key: K,
-    value: TunerSettings[K]
+    value: TunerSettings[K],
   ): Promise<void> {
     const current = await this.loadSettings();
     const updated = { ...current, [key]: value };
@@ -100,10 +94,6 @@ export class SettingsManager {
 
   static async setSensitivity(value: number): Promise<void> {
     await this.updateField("sensitivity", value);
-  }
-
-  static async setNoiseThreshold(value: number): Promise<void> {
-    await this.updateField("noiseThreshold", value);
   }
 
   static async setRingStyle(value: RingStyleName): Promise<void> {

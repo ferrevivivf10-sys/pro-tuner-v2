@@ -15,18 +15,18 @@
  *      escolhido + interpolacao parabolica, preservando a precisao em cents.
  * Custo total ~100k iteracoes: ~11x mais barato, mesma precisao.
  */
-const MIN_FREQ = 60;    // abaixo do E2 (~82Hz) com margem
-const MAX_FREQ = 1200;  // acima do E4 (~330Hz) e harmonicos
-const CLARITY_THRESHOLD = 0.90; // fracao do maior pico exigida pra aceitar um pico menor (mais agudo). 0.90 medido em gravacoes reais (aco e nylon)
-const LOOSE_THRESHOLD = 0.85;   // limiar frouxo do pico hibrido
-const HYBRID_MIN_FREQ = 125;    // o hibrido so vale para notas a partir daqui (Hz)
-const OCTAVE_CENTS = 50;        // tolerancia pra considerar "uma oitava"
+const MIN_FREQ = 60; // abaixo do E2 (~82Hz) com margem
+const MAX_FREQ = 1200; // acima do E4 (~330Hz) e harmonicos
+const CLARITY_THRESHOLD = 0.9; // fracao do maior pico exigida pra aceitar um pico menor (mais agudo). 0.90 medido em gravacoes reais (aco e nylon)
+const LOOSE_THRESHOLD = 0.85; // limiar frouxo do pico hibrido
+const HYBRID_MIN_FREQ = 125; // o hibrido so vale para notas a partir daqui (Hz)
+const OCTAVE_CENTS = 50; // tolerancia pra considerar "uma oitava"
 const SUBHARMONIC_MARGIN = 0.05; // quanto a NSDF em 2T/3T precisa superar a de T
 const FULL_RATE_FRACTION = 0.95; // conferencia em taxa cheia: fracao do maior pico exigida
 const MIN_CLARITY_ACCEPT = 0.3; // abaixo disso o sinal nao e periodico o suficiente, descarta
-const TARGET_RMS = 0.15;        // nivel alvo apos normalizacao
-const MIN_RMS = 0.0008;         // abaixo disso e silencio real, ignora
-const DECIMATION = 4;           // 44.1kHz -> ~11kHz no estagio grosseiro
+const TARGET_RMS = 0.15; // nivel alvo apos normalizacao
+const MIN_RMS = 0.0008; // abaixo disso e silencio real, ignora
+const DECIMATION = 4; // 44.1kHz -> ~11kHz no estagio grosseiro
 const REFINE_SPAN = DECIMATION * 2; // +/- amostras (taxa cheia) varridas no refino
 
 export interface PitchResult {
@@ -74,7 +74,7 @@ export class MPMProcessor {
   private static computeNSDF(
     signal: Float32Array,
     minLag: number,
-    maxLag: number
+    maxLag: number,
   ): Float32Array {
     const nsdf = new Float32Array(maxLag + 1);
     for (let tau = minLag; tau <= maxLag; tau++) {
@@ -115,7 +115,7 @@ export class MPMProcessor {
     const cMinLag = Math.max(2, Math.floor(coarseRate / MAX_FREQ));
     const cMaxLag = Math.min(
       Math.floor(coarse.length / 2),
-      Math.floor(coarseRate / MIN_FREQ)
+      Math.floor(coarseRate / MIN_FREQ),
     );
     if (cMaxLag <= cMinLag + 1) return NO_PITCH;
 
@@ -155,7 +155,7 @@ export class MPMProcessor {
     // grosseiro e o detector cai em f/3 (Si lido como Mi grave, Mizinho como
     // La). Picos acima do limiar frouxo sao conferidos na taxa cheia.
     const candidates = peakLags.filter(
-      (lag) => lag < strictLag && cNsdf[lag] >= maxValue * LOOSE_THRESHOLD
+      (lag) => lag < strictLag && cNsdf[lag] >= maxValue * LOOSE_THRESHOLD,
     );
     if (candidates.length > 0) {
       let maxLag = peakLags[0];
@@ -174,9 +174,15 @@ export class MPMProcessor {
     // Pico hibrido: se o limiar mais frouxo aponta exatamente uma oitava acima
     // de uma nota aguda, a leitura certa e a de cima (caso do Mi agudo).
     const looseLag = pick(LOOSE_THRESHOLD);
-    if (result.frequency >= HYBRID_MIN_FREQ && looseLag !== pick(CLARITY_THRESHOLD)) {
+    if (
+      result.frequency >= HYBRID_MIN_FREQ &&
+      looseLag !== pick(CLARITY_THRESHOLD)
+    ) {
       const loose = this.refine(signal, looseLag, sampleRate);
-      if (loose.frequency > 0 && Math.abs(cents(loose.frequency, result.frequency) - 1200) < OCTAVE_CENTS) {
+      if (
+        loose.frequency > 0 &&
+        Math.abs(cents(loose.frequency, result.frequency) - 1200) < OCTAVE_CENTS
+      ) {
         result = loose;
       }
     }
@@ -216,7 +222,11 @@ export class MPMProcessor {
   }
 
   // Refino: NSDF na taxa cheia numa janela estreita + interpolacao parabolica.
-  private static refine(signal: Float32Array, coarseLag: number, sampleRate: number): PitchResult {
+  private static refine(
+    signal: Float32Array,
+    coarseLag: number,
+    sampleRate: number,
+  ): PitchResult {
     const center = coarseLag * DECIMATION;
     const half = Math.floor(signal.length / 2);
     // +1 de folga de cada lado pra interpolacao ter vizinhos validos

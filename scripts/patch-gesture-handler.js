@@ -14,11 +14,14 @@ const target = path.join(
   "node_modules",
   "react-native-gesture-handler",
   "android",
-  "build.gradle"
+  "build.gradle",
 );
 
 if (!fs.existsSync(target)) {
-  console.warn("[patch-gesture-handler] arquivo nao encontrado, pulando:", target);
+  console.warn(
+    "[patch-gesture-handler] arquivo nao encontrado, pulando:",
+    target,
+  );
   process.exit(0);
 }
 
@@ -33,7 +36,7 @@ const needle = "def shouldUseCommonInterfaceFromRNSVG() {";
 const idx = content.indexOf(needle);
 if (idx === -1) {
   console.warn(
-    "[patch-gesture-handler] shouldUseCommonInterfaceFromRNSVG() nao encontrada; a lib pode ter mudado, revisar patch manualmente."
+    "[patch-gesture-handler] shouldUseCommonInterfaceFromRNSVG() nao encontrada; a lib pode ter mudado, revisar patch manualmente.",
   );
   process.exit(0);
 }

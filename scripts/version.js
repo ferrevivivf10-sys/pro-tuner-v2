@@ -10,7 +10,10 @@ const CHANGELOG_PREFIX = "docs: changelog";
 
 function git(cmd) {
   try {
-    return execSync(`git ${cmd}`, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    return execSync(`git ${cmd}`, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
   } catch {
     return "";
   }
@@ -18,7 +21,9 @@ function git(cmd) {
 
 // Commits que contam como versao (mais antigo primeiro)
 function getVersionCommits() {
-  const out = git('log --no-merges --reverse --format=%h%x09%ad%x09%s --date=short');
+  const out = git(
+    "log --no-merges --reverse --format=%h%x09%ad%x09%s --date=short",
+  );
   if (!out) return [];
   return out
     .split("\n")

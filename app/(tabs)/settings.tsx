@@ -38,7 +38,6 @@ export default function SettingsScreen() {
   const [selectedCalib, setSelectedCalib] = useState(440);
   const [selectedTuning, setSelectedTuning] = useState<TuningName>("Standard");
   const [sensitivity, setSensitivity] = useState(0.7);
-  const [noiseThreshold, setNoiseThreshold] = useState(0.02);
   const [ringStyle, setRingStyle] = useState<RingStyleName>(DEFAULT_RING_STYLE);
   const [testMode, setTestMode] = useState(false);
   const [testLowpass, setTestLowpass] = useState(false);
@@ -51,7 +50,6 @@ export default function SettingsScreen() {
         setSelectedCalib(settings.refA4);
         setSelectedTuning(settings.selectedTuning as TuningName);
         setSensitivity(settings.sensitivity);
-        setNoiseThreshold(settings.noiseThreshold);
         setRingStyle(settings.ringStyle);
         setTestMode(settings.testMode);
         setTestLowpass(settings.testLowpass);
@@ -68,7 +66,10 @@ export default function SettingsScreen() {
     try {
       await SettingsManager.setRefA4(value);
       setSelectedCalib(value);
-      Alert.alert("✓ Calibração Salva", `Referência A4 definida para ${value} Hz`);
+      Alert.alert(
+        "✓ Calibração Salva",
+        `Referência A4 definida para ${value} Hz`,
+      );
     } catch (error) {
       console.error("Erro ao salvar calibração:", error);
       Alert.alert("Erro", "Não foi possível salvar a calibração");
@@ -126,16 +127,6 @@ export default function SettingsScreen() {
     }
   };
 
-  // Salvar limiar de ruído
-  const saveNoiseThreshold = async (value: number) => {
-    try {
-      await SettingsManager.setNoiseThreshold(value);
-      setNoiseThreshold(value);
-    } catch (error) {
-      console.error("Erro ao salvar limiar de ruído:", error);
-    }
-  };
-
   return (
     <ScreenContainer className="bg-background">
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -154,7 +145,9 @@ export default function SettingsScreen() {
         >
           <View>
             <Text style={styles.sectionTitle}>Entradas de áudio</Text>
-            <Text style={styles.linkDescription}>Microfone ou cabo do instrumento</Text>
+            <Text style={styles.linkDescription}>
+              Microfone ou cabo do instrumento
+            </Text>
           </View>
           <Text style={styles.linkArrow}>›</Text>
         </TouchableOpacity>
@@ -213,8 +206,7 @@ export default function SettingsScreen() {
                   <Text
                     style={[
                       styles.tuningName,
-                      selectedTuning === tuningName &&
-                        styles.tuningNameActive,
+                      selectedTuning === tuningName && styles.tuningNameActive,
                     ]}
                   >
                     {TUNING_LABELS[tuningName]}
@@ -330,12 +322,22 @@ export default function SettingsScreen() {
               return (
                 <TouchableOpacity
                   key={String(value)}
-                  style={[styles.optionButton, isActive && styles.optionButtonActive]}
+                  style={[
+                    styles.optionButton,
+                    isActive && styles.optionButtonActive,
+                  ]}
                   onPress={() => saveTestMode(value)}
                   accessibilityRole="button"
-                  accessibilityLabel={"Modo de teste " + (value ? "ligado" : "desligado")}
+                  accessibilityLabel={
+                    "Modo de teste " + (value ? "ligado" : "desligado")
+                  }
                 >
-                  <Text style={[styles.optionText, isActive && styles.optionTextActive]}>
+                  <Text
+                    style={[
+                      styles.optionText,
+                      isActive && styles.optionTextActive,
+                    ]}
+                  >
                     {value ? "Ligado" : "Desligado"}
                   </Text>
                   {isActive && <Text style={styles.checkmark}>✓</Text>}
@@ -356,12 +358,22 @@ export default function SettingsScreen() {
                   return (
                     <TouchableOpacity
                       key={String(value)}
-                      style={[styles.optionButton, isActive && styles.optionButtonActive]}
+                      style={[
+                        styles.optionButton,
+                        isActive && styles.optionButtonActive,
+                      ]}
                       onPress={() => saveTestLowpass(value)}
                       accessibilityRole="button"
-                      accessibilityLabel={"Filtro de agudos " + (value ? "ligado" : "desligado")}
+                      accessibilityLabel={
+                        "Filtro de agudos " + (value ? "ligado" : "desligado")
+                      }
                     >
-                      <Text style={[styles.optionText, isActive && styles.optionTextActive]}>
+                      <Text
+                        style={[
+                          styles.optionText,
+                          isActive && styles.optionTextActive,
+                        ]}
+                      >
                         {value ? "Ligado" : "Desligado"}
                       </Text>
                       {isActive && <Text style={styles.checkmark}>✓</Text>}
@@ -377,16 +389,17 @@ export default function SettingsScreen() {
         <View style={styles.infoSection}>
           <Text style={styles.infoTitle}>ℹ️ Informações</Text>
           <Text style={styles.infoText}>
-            • A calibração padrão é 440 Hz (A4){"\n"}
-            • A afinação mais comum é a Padrão (Mi Lá Ré Sol Si Mi){"\n"}
-            • Altere conforme necessário para seu instrumento
+            • A calibração padrão é 440 Hz (A4){"\n"}• A afinação mais comum é a
+            Padrão (Mi Lá Ré Sol Si Mi){"\n"}• Altere conforme necessário para
+            seu instrumento
           </Text>
         </View>
 
         {/* Versão */}
         <View style={styles.footer}>
           <Text style={styles.versionText}>
-            Pro Tuner v{Constants.expoConfig?.version ?? "?"} · {Constants.expoConfig?.extra?.commit ?? "dev"}
+            Pro Tuner v{Constants.expoConfig?.version ?? "?"} ·{" "}
+            {Constants.expoConfig?.extra?.commit ?? "dev"}
           </Text>
         </View>
       </ScrollView>

@@ -9,7 +9,14 @@
  * - Suavizacao: hold da nota (400ms) e media movel de cents
  */
 
-import React, { useEffect, useRef, memo, useMemo, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useRef,
+  memo,
+  useMemo,
+  useState,
+  useCallback,
+} from "react";
 import {
   View,
   Text,
@@ -47,11 +54,11 @@ const BASE_Y = RING_CY - ((CHORD_COUNT - 1) * CHORD_SPACING) / 2;
 const STRING_AREA_WIDTH = SCREEN_WIDTH;
 
 // ===== Parametros de SUAVIZACAO =====
-const NOTE_HOLD_MS = 400;        // tempo que a nota permanece apos o som sumir
-const CENTS_SMOOTH_SIZE = 5;     // media movel das ultimas N leituras de cents
-const LOCK_HIT_HEIGHT = 40;      // altura da area de toque de cada corda (modo manual)
-const STRING_GUARD_CENTS = 250;  // ~metade da distancia entre cordas; acima disso o sinal esta longe de qualquer corda
-const IN_TUNE_CENTS = 5;         // |cents| < isso => afinado
+const NOTE_HOLD_MS = 400; // tempo que a nota permanece apos o som sumir
+const CENTS_SMOOTH_SIZE = 5; // media movel das ultimas N leituras de cents
+const LOCK_HIT_HEIGHT = 40; // altura da area de toque de cada corda (modo manual)
+const STRING_GUARD_CENTS = 250; // ~metade da distancia entre cordas; acima disso o sinal esta longe de qualquer corda
+const IN_TUNE_CENTS = 5; // |cents| < isso => afinado
 
 // Cor do aro: e FUNCIONAL, nao decorativa. Sem sinal fica apagado (nao faz
 // sentido gritar "desafinado" com o app parado), vermelho enquanto desafinado
@@ -153,7 +160,7 @@ function useStringTuner(
   confidence: number,
   confidenceMin: number,
   calStringFreqs: number[],
-  lockedIndex: number | null
+  lockedIndex: number | null,
 ) {
   const [display, setDisplay] = useState<{
     index: number | null;
@@ -304,7 +311,9 @@ const StringLinesFullWidth = memo(
                 x={10}
                 y={y - 6}
                 fontSize={isActive ? "13" : isTargeted ? "12" : "11"}
-                fill={isActive ? displayColor : isTargeted ? stringColor : "#666666"}
+                fill={
+                  isActive ? displayColor : isTargeted ? stringColor : "#666666"
+                }
                 textAnchor="start"
                 fontWeight={isActive || isTargeted ? "700" : "600"}
                 opacity={isActive ? 1 : isTargeted ? 0.9 : 0.7}
@@ -317,7 +326,7 @@ const StringLinesFullWidth = memo(
         })}
       </Svg>
     );
-  }
+  },
 );
 StringLinesFullWidth.displayName = "StringLinesFullWidth";
 
@@ -361,19 +370,21 @@ function PitchLabDisplayComponent({
 
   const confidenceMin = useMemo(
     () => confidenceThreshold(sensitivity),
-    [sensitivity]
+    [sensitivity],
   );
 
   // Frequencias das cordas ja corrigidas pela calibracao A4 escolhida.
   const calStringFreqs = useMemo(
     () => tuningNames.map((n) => stringFreq(n, refA4)),
-    [tuningNames, refA4]
+    [tuningNames, refA4],
   );
 
   // ===== Modo por corda (manual) =====
   // Tocar no nome de uma corda trava a leitura naquela corda especifica;
   // tocar de novo (ou no chip "AUTO") volta para deteccao automatica.
-  const [lockedStringIndex, setLockedStringIndex] = useState<number | null>(null);
+  const [lockedStringIndex, setLockedStringIndex] = useState<number | null>(
+    null,
+  );
 
   useEffect(() => {
     setLockedStringIndex(null);
@@ -390,7 +401,7 @@ function PitchLabDisplayComponent({
     confidence,
     confidenceMin,
     calStringFreqs,
-    lockedStringIndex
+    lockedStringIndex,
   );
 
   const activeStringIndex = tuner.index;
@@ -425,11 +436,12 @@ function PitchLabDisplayComponent({
           style={[
             styles.noteChar,
             {
-              color: !hasSignal && !isLocked
-                ? "#2A2A2A"
-                : displayInTune
-                  ? "#00E676"
-                  : "#FFFFFF",
+              color:
+                !hasSignal && !isLocked
+                  ? "#2A2A2A"
+                  : displayInTune
+                    ? "#00E676"
+                    : "#FFFFFF",
             },
           ]}
         >
@@ -473,7 +485,10 @@ function PitchLabDisplayComponent({
         </View>
 
         {/* Toque no nome de uma corda para travar nela (modo manual) */}
-        <StringHitTargets tuningNames={tuningNames} onStringPress={handleStringPress} />
+        <StringHitTargets
+          tuningNames={tuningNames}
+          onStringPress={handleStringPress}
+        />
 
         {/* Chip para voltar ao modo automatico */}
         {isLocked && (
