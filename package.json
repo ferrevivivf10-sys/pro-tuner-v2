@@ -11,7 +11,7 @@
     "format": "prettier --write .",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "postinstall": "node scripts/patch-gesture-handler.js"
+    "postinstall": "node scripts/patch-gesture-handler.js && node scripts/patch-audio-studio.js"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
