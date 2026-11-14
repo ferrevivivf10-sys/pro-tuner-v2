@@ -233,6 +233,7 @@ export default function TunerScreen() {
             ringStyle={settings?.ringStyle ?? DEFAULT_RING_STYLE}
             selectedTuning={settings?.selectedTuning ?? "Standard"}
             onTuningPress={() => setTuningModalVisible(true)}
+            captureInvalid={!!pitchData.captureWarning}
           />
         </View>
 

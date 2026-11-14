@@ -31,6 +31,7 @@ const INITIAL_PITCH_DATA: PitchData = {
 const SAMPLE_RATE = 44100;
 const STALL_CHECK_MS = 500; // de quanto em quanto tempo confere se a captura parou
 const STALL_WARNING = "Captura parada: o microfone não está enviando áudio";
+const RECOVERY_WARNING = "Captura retomada: conferindo a taxa de entrega...";
 const BUFFER_SIZE = 2048;
 const HOP_SIZE = 1024; // 50% de sobreposicao: detecta 2x mais vezes que o buffer avanca
 const MAX_BUFFER = BUFFER_SIZE * 2;
@@ -142,6 +143,7 @@ export function usePitchDetectorFinal(
   const filteredRef = useRef<Float32Array>(new Float32Array(0)); // mesmo buffer, filtrado
   const lpStateRef = useRef({ x1: 0, x2: 0, y1: 0, y2: 0 });
   const rateMonitorRef = useRef(createRateMonitor()); // taxa de entrega de amostras
+  const captureInvalidRef = useRef(false); // depois de um alerta, so volta com a taxa "ok"
 
   const { startRecording, stopRecording } = useAudioRecorder();
 
@@ -160,8 +162,10 @@ export function usePitchDetectorFinal(
 
     // Monitor da taxa de entrega: recomeca a cada captura e confere se ela parou
     rateMonitorRef.current.reset();
+    captureInvalidRef.current = false;
     const stallTimer = setInterval(() => {
       if (rateMonitorRef.current.check(performance.now()).status !== "parado") return;
+      captureInvalidRef.current = true;
       stableFreqRef.current = 0;
       candCountRef.current = 0;
       setPitchData((p) =>
@@ -208,12 +212,20 @@ export function usePitchDetectorFinal(
             lastChunkLenRef.current = samples.length;
             TestRecorder.addSamples(samples); // DIAGNOSTICO: so grava se o teste estiver ligado
 
-            // Taxa de entrega fora do esperado: avisa e nao mostra nota (nao corrige a frequencia)
+            // Taxa de entrega fora do esperado ou captura parada: avisa e nao mostra
+            // nota (nao corrige a frequencia). Depois de um alerta, as notas so
+            // voltam quando a taxa medida estiver "ok" de novo.
             const rate = rateMonitorRef.current.push(samples.length, performance.now());
             TestRecorder.setDeliveryRate(rate.rate);
-            if (rate.status === "fora" && rate.rate !== null) {
+            if (rate.status === "fora" || rate.status === "parado") captureInvalidRef.current = true;
+            else if (rate.status === "ok") captureInvalidRef.current = false;
+            if (captureInvalidRef.current) {
               const warning =
-                "Captura irregular: " + Math.round(rate.rate) + " amostras/s (esperado " + EXPECTED_RATE + ")";
+                rate.status === "fora" && rate.rate !== null
+                  ? "Captura irregular: " + Math.round(rate.rate) + " amostras/s (esperado " + EXPECTED_RATE + ")"
+                  : rate.status === "parado"
+                  ? STALL_WARNING
+                  : RECOVERY_WARNING;
               bufferRef.current = new Float32Array(0);
               filteredRef.current = new Float32Array(0);
               stableFreqRef.current = 0;

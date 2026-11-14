@@ -134,6 +134,7 @@ interface PitchLabDisplayProps {
   ringStyle: RingStyleName;
   selectedTuning: string;
   onTuningPress?: () => void;
+  captureInvalid?: boolean; // captura irregular ou parada: limpa na hora, sem hold
 }
 
 // Extrai nota + oitava de um rotulo de corda, ex: "Eb2" -> { note: "Eb", octave: 2 }
@@ -153,7 +154,8 @@ function useStringTuner(
   confidence: number,
   confidenceMin: number,
   calStringFreqs: number[],
-  lockedIndex: number | null
+  lockedIndex: number | null,
+  captureInvalid: boolean
 ) {
   const [display, setDisplay] = useState<{
     index: number | null;
@@ -171,6 +173,18 @@ function useStringTuner(
   }, [lockedIndex]);
 
   useEffect(() => {
+    // Captura invalida: limpa na hora (o hold de NOTE_HOLD_MS e so para captura normal)
+    if (captureInvalid) {
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
+      }
+      currentIndexRef.current = null;
+      centsBufferRef.current = [];
+      setDisplay({ index: lockedIndex, cents: 0, hasSignal: false });
+      return;
+    }
+
     // So conta como sinal se houver uma nota CLARA (evita travar em ruido ambiente)
     const hasRawSignal = frequency > 50 && confidence >= confidenceMin;
 
@@ -222,7 +236,7 @@ function useStringTuner(
         setDisplay({ index: lockedIndex, cents: 0, hasSignal: false });
       }, NOTE_HOLD_MS);
     }
-  }, [frequency, confidence, confidenceMin, calStringFreqs, lockedIndex]);
+  }, [frequency, confidence, confidenceMin, calStringFreqs, lockedIndex, captureInvalid]);
 
   useEffect(() => {
     return () => {
@@ -355,6 +369,7 @@ function PitchLabDisplayComponent({
   ringStyle,
   selectedTuning,
   onTuningPress,
+  captureInvalid = false,
 }: PitchLabDisplayProps) {
   const tuningNames =
     TUNING_STRING_NAMES[selectedTuning] ?? TUNING_STRING_NAMES.Standard;
@@ -390,7 +405,8 @@ function PitchLabDisplayComponent({
     confidence,
     confidenceMin,
     calStringFreqs,
-    lockedStringIndex
+    lockedStringIndex,
+    captureInvalid
   );
 
   const activeStringIndex = tuner.index;
