@@ -2,6 +2,12 @@
 
 Gerado automaticamente a cada build. Mais recente primeiro.
 
+## v1.0.55 — 2026-11-14
+- **Alterado:** README e todo.md atualizados com o estado atual do app (`a834c74`)
+
+## v1.0.54 — 2026-11-14
+- **Alterado:** limpeza: remove sobras do template e docs antigos (RELATORIO.md, design.md, script de QR, reset-project, launch.json web) (`a00b8fd`)
+
 ## v1.0.53 — 2026-11-13
 - **Alterado:** build: checa tipos (tsc) antes dos testes no workflow (`110cfd0`)
 
