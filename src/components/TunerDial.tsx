@@ -3,11 +3,11 @@
  *
  * Existem dois tipos de aro:
  *   - "minimalista": desenhado em SVG (anel fino + 60 marcacoes + indicador)
- *   - os demais: a arte em PNG, com um arco desenhado por cima
+ *   - os demais: a arte em PNG, com uma luz desenhada ATRAS do aro
  *
  * Em ambos a COR vem do estado da afinacao, nunca de uma escolha do usuario:
- * apagado sem sinal, vermelho desafinado, verde afinado. Manter o arco em SVG
- * (e nao embutido na arte) e o que permite uma imagem por estilo servir todos
+ * apagado sem sinal, vermelho desafinado, verde afinado. Manter a luz em SVG
+ * (e nao embutida na arte) e o que permite uma imagem por estilo servir todos
  * os estados.
  *
  * O mesmo componente desenha o mostrador da tela e as miniaturas do seletor,
@@ -15,7 +15,7 @@
  */
 import React, { memo } from "react";
 import { View, Image, StyleSheet } from "react-native";
-import Svg, { Path, Line, Circle } from "react-native-svg";
+import Svg, { Path, Line, Circle, Defs, RadialGradient, Stop } from "react-native-svg";
 
 export type RingStyleName =
   | "minimalista"
@@ -28,33 +28,18 @@ export type RingStyleName =
 
 interface RingStyleDef {
   label: string;
-  /** null = desenhado em SVG */
+  /** arte do aro; null = minimalista desenhado em SVG */
   image: number | null;
-  /**
-   * Onde o arco de estado assenta, em fracao do meio-lado da imagem.
-   * E por estilo porque as artes tem estruturas diferentes: nas de faixa
-   * cheia o metal vai de 0.655 a 0.79, enquanto as "escala" sao aro duplo
-   * (aro 0.655-0.70, canal de marcacoes 0.70-0.75, aro 0.75-0.79).
-   * Usar um numero unico fazia o arco transbordar o canal e cobrir os dois
-   * aros das "escala".
-   */
-  arcR: number;
-  arcW: number;
 }
 
-// Faixa cheia: o arco cobre o metal
-const BAND_ARC = { arcR: 0.725, arcW: 0.098 };
-// Aro duplo: o arco corre DENTRO do canal, sem encostar nos aros
-const CHANNEL_ARC = { arcR: 0.725, arcW: 0.044 };
-
 export const RING_STYLES: Record<RingStyleName, RingStyleDef> = {
-  minimalista: { label: "Minimalista", image: null, ...BAND_ARC },
-  aco: { label: "Aço", image: require("../../assets/images/rings/aco.png"), ...BAND_ARC },
-  ouro: { label: "Ouro", image: require("../../assets/images/rings/ouro.png"), ...BAND_ARC },
-  grafite: { label: "Grafite", image: require("../../assets/images/rings/grafite.png"), ...BAND_ARC },
-  "aco-escala": { label: "Aço escala", image: require("../../assets/images/rings/aco-escala.png"), ...CHANNEL_ARC },
-  "ouro-escala": { label: "Ouro escala", image: require("../../assets/images/rings/ouro-escala.png"), ...CHANNEL_ARC },
-  "grafite-escala": { label: "Grafite escala", image: require("../../assets/images/rings/grafite-escala.png"), ...CHANNEL_ARC },
+  minimalista: { label: "Minimalista", image: null },
+  aco: { label: "Aço", image: require("../../assets/images/rings/aco.png") },
+  ouro: { label: "Ouro", image: require("../../assets/images/rings/ouro.png") },
+  grafite: { label: "Grafite", image: require("../../assets/images/rings/grafite.png") },
+  "aco-escala": { label: "Aço escala", image: require("../../assets/images/rings/aco-escala.png") },
+  "ouro-escala": { label: "Ouro escala", image: require("../../assets/images/rings/ouro-escala.png") },
+  "grafite-escala": { label: "Grafite escala", image: require("../../assets/images/rings/grafite-escala.png") },
 };
 
 export const RING_STYLE_ORDER: RingStyleName[] = [
@@ -76,9 +61,10 @@ export function isRingStyle(value: string): value is RingStyleName {
 // ===== Cor por estado =====
 // Sem sinal fica PRATEADO, nao cinza escuro: qualquer tom mais escuro que o
 // metal e lido como mancha/sombra no aro, em vez de indicador apagado.
-export const RING_IDLE = { color: "#B9C0C6", highlight: "#E1E6EA" };
-export const RING_IN_TUNE = { color: "#00E676", highlight: "#7BFFB4" };
-export const RING_OUT = { color: "#FF5252", highlight: "#FF9E9E" };
+// glow: intensidade da luz atras do aro (0 = apagada)
+export const RING_IDLE = { color: "#B9C0C6", highlight: "#E1E6EA", glow: 0 };
+export const RING_IN_TUNE = { color: "#00E676", highlight: "#7BFFB4", glow: 0.9 };
+export const RING_OUT = { color: "#FF5252", highlight: "#FF9E9E", glow: 0.55 };
 export type RingAccent = typeof RING_IDLE;
 
 export function ringAccent(hasSignal: boolean, inTune: boolean): RingAccent {
@@ -92,21 +78,8 @@ export function ringAccent(hasSignal: boolean, inTune: boolean): RingAccent {
 // Borda externa do metal na arte: usada para dimensionar a caixa de modo que
 // o aro caia exatamente no raio pedido.
 const BAND_OUT = 0.795;
-const ARC_FROM = -125; // graus; -90 e o topo
-const ARC_TO = -55;
 // O minimalista foi desenhado para um raio de 160; as medidas escalam a partir dai.
 const MINIMAL_REF_R = 160;
-
-function arcPath(cx: number, cy: number, r: number, a0: number, a1: number): string {
-  const pt = (deg: number) => {
-    const rad = (deg * Math.PI) / 180;
-    return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
-  };
-  const [x0, y0] = pt(a0);
-  const [x1, y1] = pt(a1);
-  const large = Math.abs(a1 - a0) > 180 ? 1 : 0;
-  return `M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1}`;
-}
 
 interface TunerDialProps {
   /** raio externo do mostrador */
@@ -166,45 +139,32 @@ function TunerDialComponent({ outerR, style, accent }: TunerDialProps) {
     );
   }
 
-  // --- Aros com arte: imagem + arco de estado por cima ---
-  const arcR = def.arcR * c;
-  const arcW = def.arcW * c;
-  const d = arcPath(c, c, arcR, ARC_FROM, ARC_TO);
+  // --- Aros com arte: luz por tras + imagem por cima ---
+  // A luz e um anel radial centrado na faixa do metal (r 0.655..0.795): vaza
+  // por fora e pelo miolo transparente da arte, como se estivesse atras do aro.
+  const g = accent.glow;
+  const gid = `luz-${style}-${Math.round(outerR)}`; // id unico por mostrador
   return (
     <View style={{ width: box, height: box }} pointerEvents="none">
+      {g > 0 && (
+        <Svg width={box} height={box} style={StyleSheet.absoluteFill}>
+          <Defs>
+            <RadialGradient id={gid} cx={c} cy={c} r={c} gradientUnits="userSpaceOnUse">
+              <Stop offset="0.52" stopColor={accent.color} stopOpacity={0} />
+              <Stop offset="0.64" stopColor={accent.color} stopOpacity={g * 0.75} />
+              <Stop offset="0.725" stopColor={accent.color} stopOpacity={g} />
+              <Stop offset="0.82" stopColor={accent.color} stopOpacity={g * 0.6} />
+              <Stop offset="0.98" stopColor={accent.color} stopOpacity={0} />
+            </RadialGradient>
+          </Defs>
+          <Circle cx={c} cy={c} r={c} fill={`url(#${gid})`} />
+        </Svg>
+      )}
       <Image
         source={def.image}
         style={{ width: box, height: box }}
         resizeMode="contain"
       />
-      <Svg width={box} height={box} style={StyleSheet.absoluteFill}>
-        {/* halo */}
-        <Path
-          d={d}
-          stroke={accent.color}
-          strokeWidth={arcW * 1.9}
-          fill="none"
-          opacity={0.18}
-          strokeLinecap="round"
-        />
-        {/* nucleo */}
-        <Path
-          d={d}
-          stroke={accent.color}
-          strokeWidth={arcW}
-          fill="none"
-          strokeLinecap="round"
-        />
-        {/* faixa clara: aspecto de vidro */}
-        <Path
-          d={d}
-          stroke={accent.highlight}
-          strokeWidth={arcW * 0.3}
-          fill="none"
-          opacity={0.9}
-          strokeLinecap="round"
-        />
-      </Svg>
     </View>
   );
 }
