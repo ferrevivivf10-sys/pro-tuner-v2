@@ -16,6 +16,7 @@
 import React, { memo } from "react";
 import { View, Image, StyleSheet } from "react-native";
 import Svg, { Path, Line, Circle } from "react-native-svg";
+import { DIAL_BAND_OUT } from "./dialLayout";
 
 export type RingStyleName =
   | "minimalista"
@@ -115,7 +116,7 @@ export function ringAccent(hasSignal: boolean, inTune: boolean): RingAccent {
 // A caixa e dimensionada para a borda EXTERNA da faixa cair no raio pedido.
 // Borda externa do metal na arte: usada para dimensionar a caixa de modo que
 // o aro caia exatamente no raio pedido.
-const BAND_OUT = 0.795;
+const BAND_OUT = DIAL_BAND_OUT; // mesma medida usada em dialLayout.ts
 const ARC_FROM = -125; // graus; -90 e o topo
 const ARC_TO = -55;
 // O minimalista foi desenhado para um raio de 160; as medidas escalam a partir dai.

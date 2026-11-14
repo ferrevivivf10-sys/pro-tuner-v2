@@ -34,6 +34,8 @@ Estado em 14/11/2026 · versão 1.0.53 na `main`.
 - [x] Lint sem avisos e código formatado com Prettier
 - [x] Acessibilidade (TalkBack) no Afinador, em Ajustes e nas Entradas de áudio
 - [x] Actions do workflow atualizadas (Node 24)
+- [x] Mostrador se adapta a telas estreitas (`dialLayout.ts`), testado de 320 a 412 px
+- [x] Lógica do afinador por corda separada da tela (`stringTuner.ts`) e testada
 
 ## Pendente
 

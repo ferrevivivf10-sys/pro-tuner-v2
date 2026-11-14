@@ -22,8 +22,15 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Dimensions,
+  useWindowDimensions,
 } from "react-native";
+import {
+  dialLayout,
+  stringY,
+  BASE_RING_SIZE,
+  STRING_COUNT,
+  type DialLayout,
+} from "./dialLayout";
 import {
   TunerDial,
   ringAccent,
@@ -31,6 +38,17 @@ import {
   type RingStyleName,
 } from "./TunerDial";
 import { TUNING_LABELS, type TuningName } from "../utils/noteUtils";
+import {
+  centsBetween,
+  confidenceThreshold,
+  createCentsSmoother,
+  parseStringLabel,
+  pickTargetString,
+  spokenStringName,
+  stringFreq,
+  tuneAction,
+  TUNING_STRING_NAMES,
+} from "../utils/stringTuner";
 import Svg, {
   Path,
   Text as SvgText,
@@ -39,41 +57,15 @@ import Svg, {
   FeGaussianBlur,
 } from "react-native-svg";
 
-const SCREEN_WIDTH = Dimensions.get("window").width;
-
-const RING_SIZE = 380;
-const RING_CY = RING_SIZE / 2;
-const RING_R = 160;
-const RING_R_INNER = 130;
-
-const CHORD_COUNT = 6;
-const CHORD_SPACING = (RING_R_INNER * 2) / (CHORD_COUNT + 1);
-const BASE_Y = RING_CY - ((CHORD_COUNT - 1) * CHORD_SPACING) / 2;
-
-// Largura das linhas das cordas: ocupa a tela toda (ponta a ponta)
-const STRING_AREA_WIDTH = SCREEN_WIDTH;
+// Medidas do aro e das cordas: calculadas pela largura da tela (dialLayout.ts)
+const CHORD_COUNT = STRING_COUNT;
 
 // ===== Parametros de SUAVIZACAO =====
 const NOTE_HOLD_MS = 400; // tempo que a nota permanece apos o som sumir
-const CENTS_SMOOTH_SIZE = 5; // media movel das ultimas N leituras de cents
-const LOCK_HIT_HEIGHT = 40; // altura da area de toque de cada corda (modo manual)
-const STRING_GUARD_CENTS = 250; // ~metade da distancia entre cordas; acima disso o sinal esta longe de qualquer corda
-const IN_TUNE_CENTS = 5; // |cents| < isso => afinado
 
 // Cor do aro: e FUNCIONAL, nao decorativa. Sem sinal fica apagado (nao faz
 // sentido gritar "desafinado" com o app parado), vermelho enquanto desafinado
 // e verde quando afina.
-// Limiar de clareza (0-1) do MPM para considerar que ha uma NOTA real, e nao
-// ruido ambiente. E derivado da "sensibilidade" (0-1) escolhida nas Config.:
-// sensibilidade ALTA => limiar BAIXO (pega notas fracas, mas trava mais em ruido)
-// sensibilidade BAIXA => limiar ALTO (so notas bem definidas)
-const CONFIDENCE_MIN_AT_ZERO = 0.85; // sensibilidade 0
-const CONFIDENCE_SENS_RANGE = 0.5; // quanto a sensibilidade abaixa o limiar
-
-function confidenceThreshold(sensitivity: number): number {
-  const s = Math.max(0, Math.min(1, sensitivity));
-  return CONFIDENCE_MIN_AT_ZERO - CONFIDENCE_SENS_RANGE * s;
-}
 
 // Cores cromaticas fixas por POSICAO da corda (0 = mais grave ... 5 = mais aguda)
 const STRING_COLORS = [
@@ -85,54 +77,6 @@ const STRING_COLORS = [
   "#FF7A00", // corda 6 (aguda) - laranja
 ];
 
-const TUNING_STRING_NAMES: Record<string, string[]> = {
-  Standard: ["E2", "A2", "D3", "G3", "B3", "E4"],
-  DropD: ["D2", "A2", "D3", "G3", "B3", "E4"],
-  HalfStepDown: ["Eb2", "Ab2", "Db3", "Gb3", "Bb3", "Eb4"],
-  FullStepDown: ["D2", "G2", "C3", "F3", "A3", "D4"],
-  OpenG: ["D2", "G2", "D3", "G3", "B3", "D4"],
-};
-
-// Numero MIDI de cada nota de corda usada nas afinacoes. A frequencia e
-// derivada em runtime a partir da referencia A4 (calibracao), para que 432 Hz,
-// 440 Hz etc. produzam alvos corretos.
-const STRING_MIDI: Record<string, number> = {
-  D2: 38,
-  Eb2: 39,
-  E2: 40,
-  F2: 41,
-  Gb2: 42,
-  G2: 43,
-  Ab2: 44,
-  A2: 45,
-  Bb2: 46,
-  B2: 47,
-  C3: 48,
-  Db3: 49,
-  D3: 50,
-  Eb3: 51,
-  E3: 52,
-  F3: 53,
-  Gb3: 54,
-  G3: 55,
-  Ab3: 56,
-  A3: 57,
-  Bb3: 58,
-  B3: 59,
-  C4: 60,
-  Db4: 61,
-  D4: 62,
-  Eb4: 63,
-  E4: 64,
-  G4: 67,
-};
-
-function stringFreq(name: string, refA4: number): number {
-  const midi = STRING_MIDI[name];
-  if (midi == null) return 0;
-  return refA4 * Math.pow(2, (midi - 69) / 12);
-}
-
 interface PitchLabDisplayProps {
   frequency: number;
   confidence: number;
@@ -141,32 +85,6 @@ interface PitchLabDisplayProps {
   ringStyle: RingStyleName;
   selectedTuning: string;
   onTuningPress?: () => void;
-}
-
-// Extrai nota + oitava de um rotulo de corda, ex: "Eb2" -> { note: "Eb", octave: 2 }
-function parseStringLabel(label: string): { note: string; octave: number } {
-  const match = label.match(/^([A-G][b#]?)(\d)$/);
-  if (!match) return { note: label, octave: 0 };
-  return { note: match[1], octave: parseInt(match[2], 10) };
-}
-
-// Nome falado da nota para o leitor de tela, ex: "Eb2" -> "Mi bemol 2"
-const SPOKEN_NOTES: Record<string, string> = {
-  C: "Dó",
-  D: "Ré",
-  E: "Mi",
-  F: "Fá",
-  G: "Sol",
-  A: "Lá",
-  B: "Si",
-};
-
-export function spokenStringName(label: string): string {
-  const { note, octave } = parseStringLabel(label);
-  const base = SPOKEN_NOTES[note[0]] ?? note;
-  const accidental =
-    note[1] === "b" ? " bemol" : note[1] === "#" ? " sustenido" : "";
-  return base + accidental + (octave > 0 ? " " + octave : "");
 }
 
 // Numero da corda como o violonista conta: 6a = mais grave, 1a = mais aguda
@@ -192,13 +110,13 @@ function useStringTuner(
     hasSignal: boolean;
   }>({ index: lockedIndex, cents: 0, hasSignal: false });
 
-  const centsBufferRef = useRef<number[]>([]);
+  const smootherRef = useRef(createCentsSmoother());
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentIndexRef = useRef<number | null>(null);
 
   // Troca de corda travada / afinacao: zera a suavizacao
   useEffect(() => {
-    centsBufferRef.current = [];
+    smootherRef.current.reset();
   }, [lockedIndex]);
 
   useEffect(() => {
@@ -207,21 +125,7 @@ function useStringTuner(
 
     if (hasRawSignal) {
       // Corda alvo: a travada, ou a mais proxima dentro da tolerancia
-      let idx: number | null = lockedIndex;
-      if (idx == null) {
-        let best: number | null = null;
-        let bestDist = Infinity;
-        for (let i = 0; i < calStringFreqs.length; i++) {
-          const t = calStringFreqs[i];
-          if (!t) continue;
-          const d = Math.abs(1200 * Math.log2(frequency / t));
-          if (d < bestDist) {
-            bestDist = d;
-            best = i;
-          }
-        }
-        if (best != null && bestDist <= STRING_GUARD_CENTS) idx = best;
-      }
+      const idx = pickTargetString(frequency, calStringFreqs, lockedIndex);
 
       if (idx != null) {
         if (holdTimerRef.current) {
@@ -230,14 +134,11 @@ function useStringTuner(
         }
         if (idx !== currentIndexRef.current) {
           currentIndexRef.current = idx;
-          centsBufferRef.current = [];
+          smootherRef.current.reset();
         }
-        const target = calStringFreqs[idx];
-        const rawCents = 1200 * Math.log2(frequency / target);
-        const buf = centsBufferRef.current;
-        buf.push(rawCents);
-        if (buf.length > CENTS_SMOOTH_SIZE) buf.shift();
-        const avg = buf.reduce((a, b) => a + b, 0) / buf.length;
+        const avg = smootherRef.current.push(
+          centsBetween(frequency, calStringFreqs[idx]),
+        );
         setDisplay({ index: idx, cents: avg, hasSignal: true });
         return;
       }
@@ -248,7 +149,7 @@ function useStringTuner(
     if (!holdTimerRef.current && currentIndexRef.current != null) {
       holdTimerRef.current = setTimeout(() => {
         currentIndexRef.current = null;
-        centsBufferRef.current = [];
+        smootherRef.current.reset();
         holdTimerRef.current = null;
         setDisplay({ index: lockedIndex, cents: 0, hasSignal: false });
       }, NOTE_HOLD_MS);
@@ -272,7 +173,9 @@ const StringLinesFullWidth = memo(
     activeStringIndex,
     hasSignal,
     lockedStringIndex,
+    layout,
   }: {
+    layout: DialLayout;
     centsValue: number;
     tuningNames: string[];
     activeStringIndex: number | null;
@@ -280,11 +183,11 @@ const StringLinesFullWidth = memo(
     lockedStringIndex: number | null;
   }) => {
     const x1 = 0;
-    const x2 = STRING_AREA_WIDTH;
-    const width = STRING_AREA_WIDTH;
+    const x2 = layout.screenWidth;
+    const width = layout.screenWidth;
 
     return (
-      <Svg width={STRING_AREA_WIDTH} height={RING_SIZE}>
+      <Svg width={layout.screenWidth} height={layout.ringSize}>
         <Defs>
           <Filter id="glowActive" x="-20%" y="-50%" width="140%" height="200%">
             <FeGaussianBlur in="SourceGraphic" stdDeviation="3" />
@@ -292,7 +195,7 @@ const StringLinesFullWidth = memo(
         </Defs>
 
         {Array.from({ length: CHORD_COUNT }).map((_, i) => {
-          const y = BASE_Y + i * CHORD_SPACING;
+          const y = stringY(layout, i);
           const stringName = tuningNames[i] || "";
           const stringColor = STRING_COLORS[i] || "#666666";
           const isActive = activeStringIndex === i && hasSignal;
@@ -360,20 +263,31 @@ function StringHitTargets({
   tuningNames,
   lockedStringIndex,
   onStringPress,
+  layout,
 }: {
+  layout: DialLayout;
   tuningNames: string[];
   lockedStringIndex: number | null;
   onStringPress: (index: number) => void;
 }) {
   return (
-    <View style={styles.hitLayer} pointerEvents="box-none">
+    <View
+      style={[
+        styles.hitLayer,
+        { width: layout.screenWidth, height: layout.ringSize },
+      ]}
+      pointerEvents="box-none"
+    >
       {tuningNames.map((name, i) => {
-        const y = BASE_Y + i * CHORD_SPACING;
+        const y = stringY(layout, i);
         const locked = lockedStringIndex === i;
         return (
           <TouchableOpacity
             key={i}
-            style={[styles.hitRow, { top: y - LOCK_HIT_HEIGHT / 2 }]}
+            style={[
+              styles.hitRow,
+              { top: y - layout.hitHeight / 2, height: layout.hitHeight },
+            ]}
             activeOpacity={0.5}
             onPress={() => onStringPress(i)}
             accessibilityRole="button"
@@ -404,6 +318,10 @@ function PitchLabDisplayComponent({
 }: PitchLabDisplayProps) {
   const tuningNames =
     TUNING_STRING_NAMES[selectedTuning] ?? TUNING_STRING_NAMES.Standard;
+
+  // Encolhe o mostrador em telas estreitas (ver dialLayout.ts)
+  const { width: windowWidth } = useWindowDimensions();
+  const layout = useMemo(() => dialLayout(windowWidth), [windowWidth]);
 
   const confidenceMin = useMemo(
     () => confidenceThreshold(sensitivity),
@@ -444,7 +362,7 @@ function PitchLabDisplayComponent({
   const activeStringIndex = tuner.index;
   const hasSignal = tuner.hasSignal;
   const displayCents = tuner.cents;
-  const displayInTune = hasSignal && Math.abs(displayCents) < IN_TUNE_CENTS;
+  const displayInTune = hasSignal && tuneAction(displayCents) === "AFINADO";
 
   // Nota exibida = a da corda ativa (ou travada)
   const label =
@@ -457,13 +375,15 @@ function PitchLabDisplayComponent({
 
   // Indicador de acao no centro do anel
   // agudo (cents > 0) => AFROUXAR (baixa o tom) ; grave => APERTAR (sobe o tom)
-  const action = !hasSignal
-    ? null
-    : displayInTune
-      ? { text: "AFINADO", color: "#00E676", arrow: "" }
-      : displayCents > 0
-        ? { text: "AFROUXAR", color: "#FFB300", arrow: " ▼" }
-        : { text: "APERTAR", color: "#FFB300", arrow: " ▲" };
+  const ACTION_STYLE = {
+    AFINADO: { color: "#00E676", arrow: "" },
+    AFROUXAR: { color: "#FFB300", arrow: " ▼" },
+    APERTAR: { color: "#FFB300", arrow: " ▲" },
+  } as const;
+  const actionName = hasSignal ? tuneAction(displayCents) : null;
+  const action = actionName
+    ? { text: actionName, ...ACTION_STYLE[actionName] }
+    : null;
 
   // Resumo para o leitor de tela. So muda quando muda a corda ou a acao (nao
   // a cada leitura de cents), para o TalkBack nao falar sem parar.
@@ -489,7 +409,7 @@ function PitchLabDisplayComponent({
       {/* Nota + oitava (GRANDE). Para o leitor de tela vira um resumo falado
           que se anuncia sozinho quando muda (live region). */}
       <View
-        style={styles.noteRow}
+        style={[styles.noteRow, { width: layout.noteRowWidth }]}
         accessible
         accessibilityRole="text"
         accessibilityLabel={spokenSummary}
@@ -528,16 +448,24 @@ function PitchLabDisplayComponent({
       </View>
 
       {/* Area das cordas (ponta a ponta) + anel no fundo */}
-      <View style={styles.stringArea}>
+      <View
+        style={[
+          styles.stringArea,
+          { width: layout.screenWidth, height: layout.ringSize },
+        ]}
+      >
         {/* Anel central no FUNDO (estatico, memoizado) */}
         <View
-          style={styles.ringLayer}
+          style={[
+            styles.ringLayer,
+            { width: layout.ringSize, height: layout.ringSize },
+          ]}
           pointerEvents="none"
           importantForAccessibility="no-hide-descendants"
           accessibilityElementsHidden
         >
           <TunerDial
-            outerR={RING_R}
+            outerR={layout.ringR}
             style={ringStyle ?? DEFAULT_RING_STYLE}
             accent={ringAccent(hasSignal, displayInTune)}
           />
@@ -545,7 +473,10 @@ function PitchLabDisplayComponent({
 
         {/* Cordas atravessam a tela toda, POR CIMA do anel */}
         <View
-          style={styles.stringsLayer}
+          style={[
+            styles.stringsLayer,
+            { width: layout.screenWidth, height: layout.ringSize },
+          ]}
           pointerEvents="none"
           importantForAccessibility="no-hide-descendants"
           accessibilityElementsHidden
@@ -556,6 +487,7 @@ function PitchLabDisplayComponent({
             activeStringIndex={activeStringIndex}
             hasSignal={hasSignal}
             lockedStringIndex={lockedStringIndex}
+            layout={layout}
           />
         </View>
 
@@ -564,6 +496,7 @@ function PitchLabDisplayComponent({
           tuningNames={tuningNames}
           lockedStringIndex={lockedStringIndex}
           onStringPress={handleStringPress}
+          layout={layout}
         />
 
         {/* Chip para voltar ao modo automatico */}
@@ -582,7 +515,7 @@ function PitchLabDisplayComponent({
         {/* Indicador de acao (AFROUXAR / APERTAR / AFINADO) */}
         {action && (
           <View
-            style={styles.actionWrap}
+            style={[styles.actionWrap, { top: layout.ringCy - 16 }]}
             pointerEvents="none"
             importantForAccessibility="no-hide-descendants"
             accessibilityElementsHidden
@@ -640,7 +573,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     marginBottom: 8,
-    width: RING_SIZE,
+    width: BASE_RING_SIZE,
     justifyContent: "center",
   },
   noteChar: {
@@ -665,8 +598,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   stringArea: {
-    width: STRING_AREA_WIDTH,
-    height: RING_SIZE,
     position: "relative",
     alignItems: "center",
     justifyContent: "center",
@@ -675,14 +606,10 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 0,
     left: 0,
-    width: STRING_AREA_WIDTH,
-    height: RING_SIZE,
   },
   ringLayer: {
     position: "absolute",
     top: 0,
-    width: RING_SIZE,
-    height: RING_SIZE,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -690,14 +617,11 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 0,
     left: 0,
-    width: STRING_AREA_WIDTH,
-    height: RING_SIZE,
   },
   hitRow: {
     position: "absolute",
     left: 0,
     right: 0,
-    height: LOCK_HIT_HEIGHT,
   },
   modeBadge: {
     position: "absolute",
@@ -718,7 +642,6 @@ const styles = StyleSheet.create({
   },
   actionWrap: {
     position: "absolute",
-    top: RING_CY - 16,
     alignSelf: "center",
     paddingHorizontal: 12,
     paddingVertical: 4,
