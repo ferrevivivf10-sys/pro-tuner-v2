@@ -38,10 +38,10 @@ Estado em 14/11/2026 · versão 1.0.53 na `main`.
 ## Pendente
 
 - [ ] Assinatura própria do APK (chave + segredo no GitHub)
-- [ ] Fonte de áudio sem processamento: só na `@siteed/audio-studio` 4.x (beta)
 
 ## Decidido não fazer (por enquanto)
 
+- Fonte de áudio sem processamento (`UNPROCESSED`): testada no branch `claude/audio-unprocessed` com a `@siteed/audio-studio` 4.0 beta (+ patch para o SDK 54). No celular de teste (14/11) o Android não suporta e abre a `MIC`; a detecção já era boa nas 6 cordas. Retomar quando a 4.x sair estável ou o app for para o SDK 57
 - Juiz SWIPE: empatou com barulho real (5 consertos, 5 estragos)
 - YIN, escolha pela sequência e janela maior (3072/4096): sem ganho
 - Filtro 1500 Hz como padrão: mostra nota nas pausas com ruído
