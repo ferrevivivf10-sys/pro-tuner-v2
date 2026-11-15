@@ -91,6 +91,7 @@ interface PitchLabDisplayProps {
   ringStyle: RingStyleName;
   selectedTuning: string;
   onTuningPress?: () => void;
+  captureInvalid?: boolean; // captura irregular ou parada: limpa na hora, sem hold
 }
 
 // Numero da corda como o violonista conta: 6a = mais grave, 1a = mais aguda
@@ -109,6 +110,7 @@ function useStringTuner(
   confidenceMin: number,
   calStringFreqs: number[],
   lockedIndex: number | null,
+  captureInvalid: boolean,
 ) {
   const [display, setDisplay] = useState<{
     index: number | null;
@@ -176,6 +178,26 @@ function useStringTuner(
   }, [lockedIndex]);
 
   useEffect(() => {
+    // Captura invalida: limpa na hora (o hold de NOTE_HOLD_MS e so para captura normal)
+    if (captureInvalid) {
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
+      }
+      currentIndexRef.current = null;
+      lastReadingRef.current = null;
+      smootherRef.current.reset();
+      inTuneRef.current = false;
+      setDisplay((d) => ({
+        ...d,
+        index: lockedIndex,
+        cents: 0,
+        hasSignal: false,
+        inTune: false,
+      }));
+      return;
+    }
+
     // Trocou a afinacao ou o A4: o progresso recomeca
     if (progressForRef.current !== calStringFreqs) {
       progressForRef.current = calStringFreqs;
@@ -259,6 +281,7 @@ function useStringTuner(
     calStringFreqs,
     lockedIndex,
     applyProgress,
+    captureInvalid,
   ]);
 
   useEffect(() => {
@@ -428,6 +451,7 @@ function PitchLabDisplayComponent({
   ringStyle,
   selectedTuning,
   onTuningPress,
+  captureInvalid = false,
 }: PitchLabDisplayProps) {
   const tuningNames =
     TUNING_STRING_NAMES[selectedTuning] ?? TUNING_STRING_NAMES.Standard;
@@ -477,6 +501,7 @@ function PitchLabDisplayComponent({
     confidenceMin,
     calStringFreqs,
     lockedStringIndex,
+    captureInvalid,
   );
 
   const activeStringIndex = tuner.index;

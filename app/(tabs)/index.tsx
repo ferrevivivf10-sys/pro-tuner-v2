@@ -308,8 +308,14 @@ export default function TunerScreen() {
             ringStyle={settings?.ringStyle ?? DEFAULT_RING_STYLE}
             selectedTuning={settings?.selectedTuning ?? "Standard"}
             onTuningPress={() => setTuningModalVisible(true)}
+            captureInvalid={!!pitchData.captureWarning}
           />
         </View>
+
+        {/* Captura com problema (taxa de entrega fora do esperado ou parada) */}
+        {pitchData.captureWarning && (
+          <Text style={styles.warnText}>{pitchData.captureWarning}</Text>
+        )}
 
         {/* Modo de teste (Ajustes): dados da captacao + gravar audio e leituras */}
         {(testMode || testSeconds !== null || testSaving) && (
@@ -475,6 +481,13 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     marginBottom: 16,
     marginTop: 8,
+  },
+  warnText: {
+    color: "#ff9f43",
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 8,
+    paddingHorizontal: 16,
   },
   divider: {
     width: "60%",

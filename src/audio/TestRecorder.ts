@@ -5,6 +5,7 @@
  */
 import * as FileSystem from "expo-file-system/legacy";
 import { encode } from "base-64";
+import { RATE_WINDOW_MS, RATE_TOLERANCE, RATE_PERSIST_MS } from "./rateMonitor";
 
 const SAMPLE_RATE = 44100;
 export const TEST_MAX_SECONDS = 120;
@@ -16,6 +17,7 @@ let total = 0;
 let rows: string[] = [];
 let meta = "";
 let sourceUsed = "?"; // fonte que o Android abriu de fato
+let deliveryRate: number | null = null; // taxa de entrega medida (amostras/s)
 
 export const TestRecorder = {
   isRecording: () => recording,
@@ -31,6 +33,7 @@ export const TestRecorder = {
     total = 0;
     rows = [];
     meta = info;
+    deliveryRate = null;
     recording = true;
   },
 
@@ -50,6 +53,11 @@ export const TestRecorder = {
     if (total >= MAX_SAMPLES) recording = false;
   },
 
+  // Ultima taxa de entrega medida pelo monitor (null enquanto mede)
+  setDeliveryRate(rate: number | null) {
+    deliveryRate = rate;
+  },
+
   // Uma linha por leitura: amostra final da janela, volume, leitura crua, decisao
   logFrame(
     rms: number,
@@ -67,6 +75,7 @@ export const TestRecorder = {
         clarity.toFixed(3),
         status,
         outFreq.toFixed(2),
+        deliveryRate === null ? "" : Math.round(deliveryRate),
       ].join(","),
     );
   },
@@ -100,7 +109,14 @@ export const TestRecorder = {
       " fonte_usada=" +
       sourceUsed +
       "\n" +
-      "amostra_fim,rms,freq_crua,clareza,status,freq_saida\n" +
+      "# taxa_entrega: amostras/s recebidas pelo app (relogio do app, janela " +
+      RATE_WINDOW_MS / 1000 +
+      " s, limite " +
+      RATE_TOLERANCE * 100 +
+      "% por " +
+      RATE_PERSIST_MS / 1000 +
+      " s); vazio = medindo. Nao e a taxa fisica do conversor.\n" +
+      "amostra_fim,rms,freq_crua,clareza,status,freq_saida,taxa_entrega\n" +
       rows.join("\n") +
       "\n";
     const csvUri = await SAF.createFileAsync(

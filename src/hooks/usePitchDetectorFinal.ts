@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
-import { Platform, PermissionsAndroid } from "react-native";
+import { PermissionsAndroid } from "react-native";
 import { decode } from "base-64";
 import { useAudioRecorder } from "@siteed/audio-studio";
 import { MPMProcessor } from "../audio/MPMProcessor";
@@ -10,6 +10,7 @@ import {
   HOLD_MS,
   HOLD_SOUND_MS,
 } from "../audio/stability";
+import { createRateMonitor, EXPECTED_RATE } from "../audio/rateMonitor";
 import { NOTES } from "../utils/noteUtils";
 import type { MicSource } from "../utils/SettingsManager";
 
@@ -21,6 +22,7 @@ export interface PitchData {
   inTune: boolean;
   confidence: number;
   detectionMethod: string;
+  captureWarning?: string; // captura com problema: a nota nao e mostrada
 }
 
 const INITIAL_PITCH_DATA: PitchData = {
@@ -34,6 +36,9 @@ const INITIAL_PITCH_DATA: PitchData = {
 };
 
 const SAMPLE_RATE = 44100;
+const STALL_CHECK_MS = 500; // de quanto em quanto tempo confere se a captura parou
+const STALL_WARNING = "Captura parada: o microfone não está enviando áudio";
+const RECOVERY_WARNING = "Captura retomada: conferindo a taxa de entrega...";
 const BUFFER_SIZE = 2048;
 const HOP_SIZE = 1024; // 50% de sobreposicao: detecta 2x mais vezes que o buffer avanca
 const MAX_BUFFER = BUFFER_SIZE * 2;
@@ -129,6 +134,8 @@ export function usePitchDetectorFinal(
   const lowpassRef = useRef(lowpass);
   const filteredRef = useRef<Float32Array>(new Float32Array(0)); // mesmo buffer, filtrado
   const lpStateRef = useRef({ x1: 0, x2: 0, y1: 0, y2: 0 });
+  const rateMonitorRef = useRef(createRateMonitor()); // taxa de entrega de amostras
+  const captureInvalidRef = useRef(false); // depois de um alerta, so volta com a taxa "ok"
 
   const recorder = useAudioRecorder();
   const recorderRef = useRef(recorder);
@@ -146,10 +153,23 @@ export function usePitchDetectorFinal(
   });
 
   useEffect(() => {
-    if (Platform.OS === "web") return;
     if (!isActive) return;
 
     let cancelled = false;
+
+    // Monitor da taxa de entrega: recomeca a cada captura e confere se ela parou
+    rateMonitorRef.current.reset();
+    captureInvalidRef.current = false;
+    const stallTimer = setInterval(() => {
+      if (rateMonitorRef.current.check(performance.now()).status !== "parado") return;
+      captureInvalidRef.current = true;
+      stabilizerRef.current = createStabilizer(); // esquece a nota estavel
+      setPitchData((p) =>
+        p.captureWarning === STALL_WARNING
+          ? p
+          : { ...p, note: "-", frequency: 0, confidence: 0, captureWarning: STALL_WARNING }
+      );
+    }, STALL_CHECK_MS);
 
     const start = async () => {
       try {
@@ -189,6 +209,32 @@ export function usePitchDetectorFinal(
             const samples = base64ToFloat32(event.data);
             lastChunkLenRef.current = samples.length;
             TestRecorder.addSamples(samples); // DIAGNOSTICO: so grava se o teste estiver ligado
+
+            // Taxa de entrega fora do esperado ou captura parada: avisa e nao mostra
+            // nota (nao corrige a frequencia). Depois de um alerta, as notas so
+            // voltam quando a taxa medida estiver "ok" de novo.
+            const rate = rateMonitorRef.current.push(samples.length, performance.now());
+            TestRecorder.setDeliveryRate(rate.rate);
+            if (rate.status === "fora" || rate.status === "parado") captureInvalidRef.current = true;
+            else if (rate.status === "ok") captureInvalidRef.current = false;
+            if (captureInvalidRef.current) {
+              const warning =
+                rate.status === "fora" && rate.rate !== null
+                  ? "Captura irregular: " + Math.round(rate.rate) + " amostras/s (esperado " + EXPECTED_RATE + ")"
+                  : rate.status === "parado"
+                  ? STALL_WARNING
+                  : RECOVERY_WARNING;
+              bufferRef.current = new Float32Array(0);
+              filteredRef.current = new Float32Array(0);
+              stabilizerRef.current = createStabilizer(); // esquece a nota estavel
+              setPitchData((p) =>
+                p.captureWarning === warning
+                  ? p
+                  : { ...p, note: "-", frequency: 0, confidence: 0, captureWarning: warning }
+              );
+              return;
+            }
+            setPitchData((p) => (p.captureWarning ? { ...p, captureWarning: undefined } : p));
 
             // Copia filtrada do mesmo bloco (o estado do filtro continua entre blocos)
             const filtered = new Float32Array(samples.length);
@@ -417,96 +463,13 @@ export function usePitchDetectorFinal(
 
     return () => {
       cancelled = true;
+      clearInterval(stallTimer);
       recorderRef.current.stopRecording().catch(() => {});
       bufferRef.current = new Float32Array(0);
       filteredRef.current = new Float32Array(0);
       lpStateRef.current = { x1: 0, x2: 0, y1: 0, y2: 0 };
     };
   }, [isActive, refA4, noiseThreshold, stabilize, sensitivity, audioSource]);
-
-  useEffect(() => {
-    if (Platform.OS !== "web") return;
-
-    let audioCtx: AudioContext | null = null;
-    let stream: MediaStream | null = null;
-    let animationFrame = 0;
-    // A captura pode ser encerrada enquanto ainda espera a permissao; sem
-    // isto, ela continuava rodando escondida e misturava as leituras
-    let cancelled = false;
-
-    const start = async () => {
-      if (!isActive) return;
-
-      try {
-        // Sem os filtros de voz do navegador: eles cortam o fim da nota e
-        // mexem no volume sozinhos
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: false,
-          },
-        });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        audioCtx = new AudioContext();
-        const analyser = audioCtx.createAnalyser();
-        analyser.fftSize = BUFFER_SIZE;
-        audioCtx.createMediaStreamSource(stream).connect(analyser);
-        const buffer = new Float32Array(analyser.fftSize);
-
-        const detect = () => {
-          if (cancelled || !isActiveRef.current) return;
-          analyser.getFloatTimeDomainData(buffer);
-
-          let sumSq = 0;
-          for (let i = 0; i < buffer.length; i++) {
-            sumSq += buffer[i] * buffer[i];
-          }
-          const rms = Math.sqrt(sumSq / buffer.length);
-
-          if (rms >= noiseThreshold) {
-            const { frequency: freq, clarity } = MPMProcessor.detectPitch(
-              buffer,
-              SAMPLE_RATE,
-            );
-            if (freq > 0) {
-              const info = getNoteInfo(freq, refA4);
-              if (info) {
-                const cents = calculateCentsToTarget(freq, info.targetFreq);
-                setPitchData({
-                  note: info.noteName,
-                  octave: info.octave,
-                  frequency: freq,
-                  cents,
-                  inTune: Math.abs(cents) < 10,
-                  confidence: clarity,
-                  detectionMethod: "Web Audio API + MPM",
-                });
-              }
-            }
-          }
-
-          animationFrame = requestAnimationFrame(detect);
-        };
-
-        detect();
-      } catch (error) {
-        console.error("Web audio error:", error);
-      }
-    };
-
-    start();
-
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(animationFrame);
-      stream?.getTracks().forEach((t) => t.stop());
-      audioCtx?.close();
-    };
-  }, [isActive, refA4, noiseThreshold]);
 
   return pitchData;
 }

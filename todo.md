@@ -28,7 +28,7 @@ Estado em 14/11/2026 · versão 1.0.53 na `main`.
 - [x] Modo de teste em Ajustes: grava .wav + .csv; filtro 1500 Hz opcional
 - [x] Testes automatizados (`npm test`): detector com trechos reais + lógica do cabo
 - [x] Build checa tipos (`tsc`) antes dos testes
-- [x] Sobras do template e docs antigos removidos
+- [x] Sobras do template, docs antigos e suporte web removidos
 - [x] Estabilidade do mic separada do hook (`src/audio/stability.ts`) e testada
 - [x] `noiseThreshold` sem uso removido das configurações
 - [x] Lint sem avisos e código formatado com Prettier
@@ -41,6 +41,7 @@ Estado em 14/11/2026 · versão 1.0.53 na `main`.
 - [x] "X de 6 cordas afinadas" com ✓ nas cordas e vibração
 - [x] Fonte do microfone no modo de teste (Padrão / Voz / Cru) e web sem filtros de voz
 - [x] Fim da nota: nota nova só entra logo após um ataque (salto de volume); sub-harmônicos, cordas por simpatia e ruído no fim da nota descartados
+- [x] Monitor da taxa de entrega: aviso e nota bloqueada se a captura sair de 44.100 ± 2% ou parar (validar o limite no aparelho)
 
 ## Pendente
 
@@ -55,7 +56,7 @@ Estado em 14/11/2026 · versão 1.0.53 na `main`.
 - Filtro 1500 Hz como padrão: mostra nota nas pausas com ruído
 - Modo processado do Android: corta notas e apaga o Mi grave
 - Módulo nativo de áudio: o mic já chega praticamente cru
-- Web e iOS: fora do alvo atual
+- Web: suporte removido do código; iOS: fora do alvo atual
 
 ## Ideias
 
