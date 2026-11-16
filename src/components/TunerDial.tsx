@@ -16,6 +16,7 @@
 import React, { memo } from "react";
 import { View, Image, StyleSheet } from "react-native";
 import Svg, {
+  LinearGradient,
   Path,
   Line,
   Circle,
@@ -104,6 +105,30 @@ export function ringAccent(hasSignal: boolean, inTune: boolean): RingAccent {
 const BAND_OUT = DIAL_BAND_OUT; // mesma medida usada em dialLayout.ts
 // O minimalista foi desenhado para um raio de 160; as medidas escalam a partir dai.
 const MINIMAL_REF_R = 160;
+// Bordas do metal na arte (fracao do meio-lado): a luz nasce rente a elas.
+const EDGE_IN = 0.655;
+const EDGE_OUT = BAND_OUT;
+const BAND_MID = (EDGE_IN + EDGE_OUT) / 2;
+
+/** Mistura uma cor #RRGGBB com branco (w = 0..1). */
+function towardWhite(hex: string, w: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = (v: number) => Math.round(v + (255 - v) * w);
+  const r = ch((n >> 16) & 255);
+  const g = ch((n >> 8) & 255);
+  const b = ch(n & 255);
+  return "#" + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+}
+
+function arcPath(cx: number, cy: number, r: number, a0: number, a1: number) {
+  const pt = (deg: number) => {
+    const rad = (deg * Math.PI) / 180;
+    return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+  };
+  const [x0, y0] = pt(a0);
+  const [x1, y1] = pt(a1);
+  return `M ${x0} ${y0} A ${r} ${r} 0 0 1 ${x1} ${y1}`;
+}
 
 interface TunerDialProps {
   /** raio externo do mostrador */
@@ -117,9 +142,10 @@ function TunerDialComponent({ outerR, style, accent }: TunerDialProps) {
   const box = (outerR / BAND_OUT) * 2;
   const c = box / 2;
 
-  // --- Minimalista: anel fino + 60 marcacoes + indicador pequeno no topo ---
+  // --- Minimalista: anel fino + 60 marcacoes; o proprio anel acende (neon discreto) ---
   if (def.image == null) {
     const k = outerR / MINIMAL_REF_R;
+    const lit = accent.glow;
     const ticks = [];
     for (let i = 0; i < 60; i++) {
       const rad = ((i * 6 - 90) * Math.PI) / 180;
@@ -134,7 +160,7 @@ function TunerDialComponent({ outerR, style, accent }: TunerDialProps) {
           y1={c + outerR * Math.sin(rad)}
           x2={c + (outerR - len) * Math.cos(rad)}
           y2={c + (outerR - len) * Math.sin(rad)}
-          stroke={isCenter ? accent.color : isQuarter ? "#AAAAAA" : "#3A3A3A"}
+          stroke={isCenter ? "#B9C0C6" : isQuarter ? "#AAAAAA" : "#3A3A3A"}
           strokeWidth={Math.max(w, 0.5)}
         />,
       );
@@ -150,52 +176,90 @@ function TunerDialComponent({ outerR, style, accent }: TunerDialProps) {
             stroke="#1F1F1F"
             strokeWidth={2 * k}
           />
+          {lit > 0 && (
+            <>
+              {/* halo curto em volta da linha */}
+              <Circle
+                cx={c}
+                cy={c}
+                r={outerR}
+                fill="none"
+                stroke={accent.color}
+                strokeWidth={7 * k}
+                strokeOpacity={0.1 * lit}
+              />
+              <Circle
+                cx={c}
+                cy={c}
+                r={outerR}
+                fill="none"
+                stroke={accent.color}
+                strokeWidth={3.5 * k}
+                strokeOpacity={0.25 * lit}
+              />
+              {/* a linha acesa */}
+              <Circle
+                cx={c}
+                cy={c}
+                r={outerR}
+                fill="none"
+                stroke={towardWhite(accent.color, 0.2)}
+                strokeWidth={1.6 * k}
+                strokeOpacity={0.55 + 0.45 * lit}
+              />
+            </>
+          )}
           {ticks}
-          {/* indicador do topo, como no mostrador original */}
-          <Path
-            d={`M ${c} ${c - outerR - 2 * k} L ${c} ${c - outerR + 18 * k}`}
-            stroke={accent.color}
-            strokeWidth={5 * k}
-            strokeLinecap="round"
-          />
         </Svg>
       </View>
     );
   }
 
-  // --- Aros com arte: luz por tras + imagem por cima ---
-  // A luz e um anel radial centrado na faixa do metal (r 0.655..0.795): vaza
-  // por fora e pelo miolo transparente da arte, como se estivesse atras do aro.
+  // --- Aros com arte: luz por tras + imagem + acabamento por cima ---
+  // Atras: luz que nasce rente as bordas do metal (quase branca ali) e se
+  // espalha para fora e para o miolo. Por cima: bordas acesas, um leve
+  // reflexo da cor no metal e um brilho no topo, como metal polido.
   const g = accent.glow;
-  const gid = `luz-${style}-${Math.round(outerR)}`; // id unico por mostrador
+  const id = `${style}-${Math.round(outerR)}`; // ids unicos por mostrador
+  const col = accent.color;
+  const hot = towardWhite(col, 0.6);
+  const rim = towardWhite(col, 0.55);
+  const spec = towardWhite(col, 0.85);
+  const specR = BAND_MID * c;
+  const specX = specR * Math.SQRT1_2; // pontas do arco do brilho (-135..-45 graus)
   return (
     <View style={{ width: box, height: box }} pointerEvents="none">
       {g > 0 && (
         <Svg width={box} height={box} style={StyleSheet.absoluteFill}>
           <Defs>
             <RadialGradient
-              id={gid}
+              id={`luz-${id}`}
               cx={c}
               cy={c}
               r={c}
               gradientUnits="userSpaceOnUse"
             >
-              <Stop offset="0.52" stopColor={accent.color} stopOpacity={0} />
+              <Stop offset="0.45" stopColor={col} stopOpacity={0} />
+              <Stop offset="0.6" stopColor={col} stopOpacity={0.35 * g} />
+              <Stop offset={EDGE_IN - 0.007} stopColor={hot} stopOpacity={g} />
               <Stop
-                offset="0.64"
-                stopColor={accent.color}
-                stopOpacity={g * 0.75}
+                offset={EDGE_IN + 0.01}
+                stopColor={col}
+                stopOpacity={0.9 * g}
               />
-              <Stop offset="0.725" stopColor={accent.color} stopOpacity={g} />
               <Stop
-                offset="0.82"
-                stopColor={accent.color}
-                stopOpacity={g * 0.6}
+                offset={EDGE_OUT - 0.01}
+                stopColor={col}
+                stopOpacity={0.9 * g}
               />
-              <Stop offset="0.98" stopColor={accent.color} stopOpacity={0} />
+              <Stop offset={EDGE_OUT + 0.01} stopColor={hot} stopOpacity={g} />
+              <Stop offset="0.84" stopColor={col} stopOpacity={0.55 * g} />
+              <Stop offset="0.9" stopColor={col} stopOpacity={0.25 * g} />
+              <Stop offset="0.96" stopColor={col} stopOpacity={0.08 * g} />
+              <Stop offset="1" stopColor={col} stopOpacity={0} />
             </RadialGradient>
           </Defs>
-          <Circle cx={c} cy={c} r={c} fill={`url(#${gid})`} />
+          <Circle cx={c} cy={c} r={c} fill={`url(#luz-${id})`} />
         </Svg>
       )}
       <Image
@@ -203,6 +267,74 @@ function TunerDialComponent({ outerR, style, accent }: TunerDialProps) {
         style={{ width: box, height: box }}
         resizeMode="contain"
       />
+      {g > 0 && (
+        <Svg width={box} height={box} style={StyleSheet.absoluteFill}>
+          <Defs>
+            <LinearGradient
+              id={`brilho-${id}`}
+              x1={c - specX}
+              y1={0}
+              x2={c + specX}
+              y2={0}
+              gradientUnits="userSpaceOnUse"
+            >
+              <Stop offset="0" stopColor={spec} stopOpacity={0} />
+              <Stop offset="0.5" stopColor={spec} stopOpacity={0.7 * g} />
+              <Stop offset="1" stopColor={spec} stopOpacity={0} />
+            </LinearGradient>
+          </Defs>
+          {/* metal contra a luz: um pouco mais escuro, com reflexo da cor */}
+          <Circle
+            cx={c}
+            cy={c}
+            r={BAND_MID * c}
+            fill="none"
+            stroke="#000000"
+            strokeWidth={(EDGE_OUT - EDGE_IN) * c}
+            strokeOpacity={0.15 * g}
+          />
+          <Circle
+            cx={c}
+            cy={c}
+            r={BAND_MID * c}
+            fill="none"
+            stroke={col}
+            strokeWidth={(EDGE_OUT - EDGE_IN) * c}
+            strokeOpacity={0.12 * g}
+          />
+          {/* bordas acesas: luz vazando por cima das quinas */}
+          {[EDGE_IN, EDGE_OUT].map((e) => (
+            <React.Fragment key={e}>
+              <Circle
+                cx={c}
+                cy={c}
+                r={e * c}
+                fill="none"
+                stroke={col}
+                strokeWidth={0.035 * c}
+                strokeOpacity={0.22 * g}
+              />
+              <Circle
+                cx={c}
+                cy={c}
+                r={e * c}
+                fill="none"
+                stroke={rim}
+                strokeWidth={0.012 * c}
+                strokeOpacity={0.9 * g}
+              />
+            </React.Fragment>
+          ))}
+          {/* brilho no topo do metal */}
+          <Path
+            d={arcPath(c, c, specR, -135, -45)}
+            stroke={`url(#brilho-${id})`}
+            strokeWidth={0.06 * c}
+            strokeLinecap="round"
+            fill="none"
+          />
+        </Svg>
+      )}
     </View>
   );
 }
